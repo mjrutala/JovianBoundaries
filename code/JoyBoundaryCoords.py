@@ -5,24 +5,37 @@ Created on Wed Mar  6 09:52:22 2024
 
 @author: mrutala
 """
-
 def find_JoyBowShock(p_dyn, x=False, y=False, z=False):
+    return find_JoyBoundaries(p_dyn, boundary='BS', x=x, y=y, z=z)
+    
+def find_JoyMagnetopause(p_dyn, x=False, y=False, z=False):
+    return find_JoyBoundaries(p_dyn, boundary='MP', x=x, y=y, z=z)
+
+def find_JoyBoundaries(p_dyn, boundary='BS', x=False, y=False, z=False):
     import numpy as np
     import warnings
     
     def fxn():
         warnings.warn("runtime", RuntimeWarning)
         
-
-        
     #   Joy+ 2002 coefficients
-    A = -1.107 + 1.591 * p_dyn**(-1/4)
-    B = -0.566 - 0.812 * p_dyn**(-1/4)
-    C = 0.048 - 0.059*p_dyn**(-1/4)
-    
-    D = 0.077 - 0.038 * p_dyn
-    E = -0.874 - 0.299 * p_dyn
-    F = -0.055 + 0.124 * p_dyn
+    match boundary.lower():
+        case ('bs' | 'bowshock' | 'bow shock'):
+            A = -1.107 + 1.591 * p_dyn**(-1/4)
+            B = -0.566 - 0.812 * p_dyn**(-1/4)
+            C = +0.048 - 0.059 * p_dyn**(-1/4)
+            D = +0.077 - 0.038 * p_dyn
+            E = -0.874 - 0.299 * p_dyn
+            F = -0.055 + 0.124 * p_dyn
+        case ('mp' | 'magnetopause'):
+            A = -0.134 + 0.488 * p_dyn**(-1/4)
+            B = -0.581 - 0.225 * p_dyn**(-1/4)
+            C = -0.186 - 0.016 * p_dyn**(-1/4)
+            D = -0.014 + 0.096 * p_dyn
+            E = -0.814 - 0.811 * p_dyn
+            F = -0.050 + 0.168 * p_dyn
+        case _:
+            return
     
     scale_factor = 1/120.
     
