@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import sys
-import find_JoyBoundaryCoords as JBC
+import JoyBoundaryCoords as JBC
 
 plt.style.use('/Users/mrutala/code/python/mjr.mplstyle')
 
@@ -54,6 +54,10 @@ for perijove_label, dates in perijove_dict.items():
 for perijove in set(bowshock_encounters['perijove'].values):
     
     bs_subset = bowshock_encounters.loc[bowshock_encounters['perijove'] == perijove]
+    direction_colors = np.array(['xkcd:aqua' if row['direction'] == 'out' else 'xkcd:salmon' 
+                                 for index, row in bs_subset.iterrows()])
+    direction_markers = np.array(['x' if row['direction'] == 'out' else 'o'
+                                  for index, row in bs_subset.iterrows()])
     
     #   Quick function to round datetimes to the nearest hour
     def nearest_hour(datetimes):
@@ -61,37 +65,47 @@ for perijove in set(bowshock_encounters['perijove'].values):
                   dt.timedelta(hours=t.minute//30) for t in datetimes]
         return np.array(result)
     
-    padding = dt.timedelta(hours=10*10)
+    padding = dt.timedelta(hours=24*4)
     datetime_range = nearest_hour(bs_subset.index[[0,-1]].to_pydatetime())
     datetime_range = datetime_range + np.array([-padding, padding])
     
+    extended_datetime_range = datetime_range + np.array([-4*padding, 4*padding])
+    
     datetimes = np.arange(*datetime_range, dt.timedelta(hours=1)).astype(dt.datetime)
+    extended_datetimes = np.arange(*extended_datetime_range, dt.timedelta(hours=1)).astype(dt.datetime)
     
     fig, axd = plt.subplot_mosaic(
         """
         abc
         ddd
+        eee
         """,
-        layout="constrained",)
+        layout="constrained", figsize=(6,6))
     
+    #   Juno global positiong from SPICE
     with spice.KernelPool('/Users/mrutala/SPICE/juno/metakernel_juno.txt'):
-        
-        ets = spice.datetime2et(datetimes)
-        
-        juno_pos, lts = spice.spkpos('Juno', ets, 
+        ets = spice.datetime2et(extended_datetimes)
+        extended_juno_pos, lts = spice.spkpos('Juno', ets, 
                                      'Juno_JSS', 'LT', 'Jupiter')
-        juno_pos = juno_pos.T / R_J
+        extended_juno_pos = extended_juno_pos.T / R_J
+        juno_pos = extended_juno_pos[:, (extended_datetimes >= datetime_range[0]) & (extended_datetimes <= datetime_range[1])]
         
         crossing_pos, lts = spice.spkpos('Juno', spice.datetime2et(bs_subset.index.to_pydatetime()), 
                                          'Juno_JSS', 'LT', 'Jupiter')
         crossing_pos = crossing_pos.T / R_J
     
+    #   Start plotting
     #   X-Y plane 
-    axd['a'].plot(juno_pos[0], juno_pos[1])
-    axd['a'].scatter(crossing_pos[0], crossing_pos[1],
-                     marker='x', color='black', s=32)
+    for marker in set(direction_markers):
+        mask = np.array(direction_markers) == marker
+        axd['a'].scatter(crossing_pos[0,mask], crossing_pos[1,mask],
+                         marker=marker, c=direction_colors[mask], s=32, linewidth=1)
     axd['a'].scatter(0,0,marker='*', color='xkcd:peach')
-    axd['a'].set(xlabel=r'$X_{JSS}$', ylabel=r'$Y_{JSS}$')
+    
+    axd['a'].plot(extended_juno_pos[0], extended_juno_pos[1], 
+                  color='black', linewidth=0.5)
+    axd['a'].plot(juno_pos[0], juno_pos[1], 
+                  color='xkcd:blue', linewidth=1)
     
     x_bs = np.arange(-150,150.1,.1)
     y_bs = JBC.find_JoyBowShock(np.mean(bs_subset['p_dyn']), x=x_bs, z=np.mean(bs_subset['z_JSS']))
@@ -99,14 +113,22 @@ for perijove in set(bowshock_encounters['perijove'].values):
     axd['a'].plot(x_bs, y_bs[1], color='gray', linewidth=1)
     axd['a'].annotate('z = {0:.1f}'.format(np.mean(bs_subset['z_JSS'])), 
                       (1,1), (-1,-1), 
-                      xycoords='axes fraction', textcoords='offset fontsize')
+                      xycoords='axes fraction', textcoords='offset fontsize',
+                      ha='right', va='center')
+    
+    axd['a'].set_aspect(1)
+    axd['a'].set(xlabel=r'$X_{JSS}$', ylabel=r'$Y_{JSS}$')
     
     #   X-Z plane
-    axd['b'].plot(juno_pos[0], juno_pos[2])
     axd['b'].scatter(crossing_pos[0],crossing_pos[2],
-                     marker='x', color='black', s=32)
+                     marker='x', c=direction_colors, s=32, linewidth=0.5)
     axd['b'].scatter(0,0,marker='*', color='xkcd:peach')
-    axd['b'].set(xlabel=r'$X_{JSS}$', ylabel=r'$Z_{JSS}$')
+    xlim, ylim = axd['b'].get_xlim(), axd['b'].get_ylim()
+    
+    axd['b'].plot(extended_juno_pos[0], extended_juno_pos[2], 
+                  color='black', linewidth=0.5)
+    axd['b'].plot(juno_pos[0], juno_pos[2], 
+                 color='xkcd:blue', linewidth=1)
     
     x_bs = np.arange(-150,150.1,.1)
     z_bs = JBC.find_JoyBowShock(np.mean(bs_subset['p_dyn']), x=x_bs, y=np.mean(bs_subset['y_JSS']))
@@ -114,14 +136,22 @@ for perijove in set(bowshock_encounters['perijove'].values):
     axd['b'].plot(x_bs, z_bs[1], color='gray', linewidth=1)
     axd['b'].annotate('y = {0:.1f}'.format(np.mean(bs_subset['y_JSS'])), 
                       (1,1), (-1,-1), 
-                      xycoords='axes fraction', textcoords='offset fontsize')
+                      xycoords='axes fraction', textcoords='offset fontsize',
+                      ha='right', va='center')
+    
+    #axd['b'].set(xlim=xlim, ylim=ylim)
+    axd['b'].set_aspect(1)
+    axd['b'].set(xlabel=r'$X_{JSS}$', ylabel=r'$Z_{JSS}$')
     
     #   Y-Z Plane
-    axd['c'].plot(juno_pos[1], juno_pos[2])
     axd['c'].scatter(crossing_pos[1],crossing_pos[2],
-                     marker='x', color='black', s=32)
+                     marker='x', c=direction_colors, s=32, linewidth=0.5)
     axd['c'].scatter(0,0,marker='*', color='xkcd:peach')
-    axd['c'].set(xlabel=r'$Y_{JSS}$', ylabel=r'$Z_{JSS}$')
+    
+    axd['c'].plot(extended_juno_pos[1], extended_juno_pos[2], 
+                  color='black', linewidth=1)
+    axd['c'].plot(juno_pos[1], juno_pos[2], 
+                  color='xkcd:blue', linewidth=2)
     
     y_bs = np.arange(-150,150.1,.1)
     z_bs = JBC.find_JoyBowShock(np.mean(bs_subset['p_dyn']), x=np.mean(bs_subset['x_JSS']), y=y_bs)
@@ -129,30 +159,63 @@ for perijove in set(bowshock_encounters['perijove'].values):
     axd['c'].plot(y_bs, z_bs[1], color='gray', linewidth=1)
     axd['c'].annotate('x = {0:.1f}'.format(np.mean(bs_subset['x_JSS'])), 
                       (1,1), (-1,-1), 
-                      xycoords='axes fraction', textcoords='offset fontsize')
+                      xycoords='axes fraction', textcoords='offset fontsize',
+                      ha='right', va='center')
     
+    axd['c'].set_aspect(1)
+    axd['c'].set(xlabel=r'$Y_{JSS}$', ylabel=r'$Z_{JSS}$')
     
     #   MMESH
+    colors = ['xkcd:baby blue', 'xkcd:kelly green', 'xkcd:lavender', 'xkcd:navy']
+    sw_model_names = list(set(sw_models.columns.get_level_values(0)))
+    
     try:
-        y = sw_models.loc[datetimes, ('ensemble', 'p_dyn')]
-        y_upper = sw_models.loc[datetimes, ('ensemble', 'p_dyn_pos_unc')]
-        y_lower = sw_models.loc[datetimes, ('ensemble', 'p_dyn_neg_unc')]               
-        
-        axd['d'].plot(sw_models.loc[datetimes, ('ensemble', 'p_dyn')])
-        axd['d'].fill_between(y.index, y-y_lower, y+y_upper,
-                              alpha=0.5)
-        axd['d'].set_yscale('log')
-        
+        for num, sw_model in enumerate(sw_model_names):
+            
+            y = sw_models.loc[datetimes, (sw_model, 'p_dyn')]
+            y_upper = sw_models.loc[datetimes, (sw_model, 'p_dyn_pos_unc')]
+            y_lower = sw_models.loc[datetimes, (sw_model, 'p_dyn_neg_unc')]               
+            
+            axd['d'].plot(y.index, y,
+                          color=colors[num], label=sw_model)
+            axd['d'].fill_between(y.index, y-y_lower, y+y_upper,
+                                  alpha=0.5, color=colors[num])
+            axd['d'].set_yscale('log')
+            
+            
+        axd['d'].legend()
 
     except:
         axd['d'].annotate('No MMESH output currently available!', (0,1), (1,-1), 
                           xycoords='axes fraction', textcoords='offset fontsize')
-        
-    axd['d'].scatter(bs_subset.index, bs_subset['p_dyn'], 
-                     color='black', marker='x', s=32)
+    
+    for marker in set(direction_markers):
+        mask = np.array(direction_markers) == marker
+        axd['d'].scatter(bs_subset.index[mask], bs_subset['p_dyn'].values[mask],
+                         marker=marker, c=direction_colors[mask], s=32, linewidth=1)
     axd['d'].set(ylabel='Pressure [nPa]', xlabel='Date')
         
-        
+    try:
+        for num, sw_model in enumerate(sw_model_names):
+            
+            y = sw_models.loc[datetimes, (sw_model, 'u_mag')]
+            y_upper = sw_models.loc[datetimes, (sw_model, 'u_mag_pos_unc')]
+            y_lower = sw_models.loc[datetimes, (sw_model, 'u_mag_neg_unc')]               
+            
+            axd['e'].plot(y.index, y,
+                          color=colors[num], label=sw_model)
+            axd['e'].fill_between(y.index, y-y_lower, y+y_upper,
+                                  alpha=0.5, color=colors[num])
+            axd['e'].set_yscale('log')
+            
+            
+        axd['e'].legend()
+
+    except:
+        axd['e'].annotate('No MMESH output currently available!', (0,1), (1,-1), 
+                          xycoords='axes fraction', textcoords='offset fontsize')
+    axd['e'].set(ylabel='Flow Speed [km/s]', xlabel='Date')
+    
     plt.show()
      
     #breakpoint()
