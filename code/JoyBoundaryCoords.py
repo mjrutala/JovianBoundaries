@@ -11,6 +11,41 @@ def find_JoyBowShock(p_dyn, x=False, y=False, z=False):
 def find_JoyMagnetopause(p_dyn, x=False, y=False, z=False):
     return find_JoyBoundaries(p_dyn, boundary='MP', x=x, y=y, z=z)
 
+
+def get_JoyCoefficients(p=0, boundary='BS', function=False):
+    
+    #   Joy+ 2002 coefficients
+    match boundary.lower():
+        case ('bs' | 'bowshock' | 'bow shock'):
+            A0, A1 = -1.107, +1.591
+            B0, B1 = -0.566, -0.812
+            C0, C1 = +0.048, -0.059
+            D0, D1 = +0.077, -0.038
+            E0, E1 = -0.874, -0.299
+            F0, F1 = -0.055, +0.124
+        case ('mp' | 'magnetopause'):
+            A0, A1 = -0.134, +0.488
+            B0, B1 = -0.581, -0.225
+            C0, C1 = -0.186, -0.016
+            D0, D1 = -0.014, +0.096
+            E0, E1 = -0.814, -0.811
+            F0, F1 = -0.050, +0.168
+        case _:
+            return
+        
+    A = lambda p: (A0 + A1*p**(-1/4))
+    B = lambda p: (B0 + B1*p**(-1/4))
+    C = lambda p: (C0 + C1*p**(-1/4))
+    D = lambda p: (D0 + D1*p)
+    E = lambda p: (E0 + E1*p)
+    F = lambda p: (F0 + F1*p)
+    
+    if function:
+        result = {'A':A, 'B':B, 'C':C, 'D':D, 'E':E, 'F':F}
+    else:
+        result = {'A':A(p), 'B':B(p), 'C':C(p), 'D':D(p), 'E':E(p), 'F':F(p)}
+    return result
+
 def find_JoyBoundaries(p_dyn, boundary='BS', x=False, y=False, z=False):
     import numpy as np
     import warnings
@@ -19,24 +54,7 @@ def find_JoyBoundaries(p_dyn, boundary='BS', x=False, y=False, z=False):
         warnings.warn("runtime", RuntimeWarning)
         
     #   Joy+ 2002 coefficients
-    match boundary.lower():
-        case ('bs' | 'bowshock' | 'bow shock'):
-            A = -1.107 + 1.591 * p_dyn**(-1/4)
-            B = -0.566 - 0.812 * p_dyn**(-1/4)
-            C = +0.048 - 0.059 * p_dyn**(-1/4)
-            D = +0.077 - 0.038 * p_dyn
-            E = -0.874 - 0.299 * p_dyn
-            F = -0.055 + 0.124 * p_dyn
-        case ('mp' | 'magnetopause'):
-            A = -0.134 + 0.488 * p_dyn**(-1/4)
-            B = -0.581 - 0.225 * p_dyn**(-1/4)
-            C = -0.186 - 0.016 * p_dyn**(-1/4)
-            D = -0.014 + 0.096 * p_dyn
-            E = -0.814 - 0.811 * p_dyn
-            F = -0.050 + 0.168 * p_dyn
-        case _:
-            return
-    
+    A, B, C, D, E, F = get_JoyCoefficients(p_dyn, boundary=boundary).values()
     scale_factor = 1/120.
     
     #   z**2 = A + B*x + C*x**2 + D*y + E*y**2 + F*x*y
@@ -82,5 +100,30 @@ def find_JoyBoundaries(p_dyn, boundary='BS', x=False, y=False, z=False):
         result_minus = (-bq - np.sqrt(bq**2 - 4*aq*cq))/(2*aq)
         
     return np.array([result_plus, result_minus]) / scale_factor
+
+def find_JoyPressures(x, y, z, boundary='BS'):
+    import numpy as np
+    from scipy.optimize import minimize_scalar
+    
+    x, y, z = np.array(x), np.array(y), np.array(z)
+    
+    A, B, C, D, E, F = get_JoyCoefficients(boundary=boundary, function=True).values()
+    
+    scale_factor = 1/120.
+    
+    resulting_pressures = []
+    for xi, yi, zi in zip(x, y, z):
+        xi = xi*scale_factor
+        yi = yi*scale_factor
+        zi = zi*scale_factor
+        
+        def Joy2002(p):
+            function = A(p) + B(p)*xi + C(p)*xi**2 + D(p)*yi + E(p)*yi**2 + F(p)*xi*yi - zi**2
+            return abs(function)
+    
+        res = minimize_scalar(Joy2002, bounds=(1e-5, 1e1), method='bounded')
+        
+        resulting_pressures.append(res.x)
+    breakpoint()
         
     
