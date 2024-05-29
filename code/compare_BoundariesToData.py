@@ -19,7 +19,7 @@ import pandas as pd
 import sys
 import JoyBoundaryCoords as JBC
 
-sys.path.append('/Users/mrutala/projects/MMESH/')
+sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
 import MMESH_reader
 
 import boundaries
@@ -334,13 +334,13 @@ def runner(parameter_distributions=False):
                                     'guess': [60, -0.15, 0.5, 1.0, 1.0]},
                        'Shuelike_Asymmetric': {'model': boundaries.Shuelike_Asymmetric, 
                                                        'params': ['r0', 'r1', 'r2', 'a0', 'a1', 'a2'], 
-                                                       'guess': [60, -0.15, 10, 0.5, 1.0, 1.0]},
+                                                       'guess': [60, -0.15, 1, 0.5, 1.0, 1.0]},
                        'Joylike': {'model': boundaries.Joylike, 
                                    'params': ['A0', 'A1', 'B0', 'B1', 'C0', 'C1', 'D0', 'D1', 'E0', 'E1', 'F0', 'F1'], 
                                    'guess': [-0.134, 0.488, -0.581, -0.225, -0.186, -0.016, -0.014, 0.096, -0.814,  -0.811, -0.050, 0.168]}
                        }
     #boundary_model = boundary_models['Shuelike']
-    boundary_model = boundary_models['Shuelike_Asymmetric']
+    boundary_model = boundary_models['Shuelike']
     
     # Here: add a loop for MC and a function which perturbs the variables
     n_mc = 1000
@@ -445,13 +445,13 @@ def runner(parameter_distributions=False):
     p = np.append(np.zeros(half_nsamples) + 0, np.zeros(half_nsamples) + 180) * dtor
     rtp_coords_dict['xz'] = (t, p)
     
-    test_pressure_cases = {'1': {'p_dyn': 0.01,
+    test_pressure_cases = {'1': {'p_dyn': 0.005,
                                  'linestyle': ':',
                                  'color': 'black'},
                            '2': {'p_dyn': 0.03,
                                  'linestyle': '-',
                                  'color': 'black'},
-                           '3': {'p_dyn': 0.1,
+                           '3': {'p_dyn': 0.3,
                                  'linestyle': '--',
                                  'color': 'black'}
                            }
@@ -459,10 +459,9 @@ def runner(parameter_distributions=False):
     fig, axd = plt.subplot_mosaic(
         [['yx', '3d', 'cb'],
          ['yz', 'xz', 'cb']],
-        width_ratios = [1, 1, 0.1],
-        figsize=(6,5))
-    plt.subplots_adjust(left=0.1, bottom=0.14, right=0.8, top=0.98, 
-                        wspace=0.15, hspace=0.15)
+        figsize=(6,5), width_ratios = [1, 1, 0.1])
+    plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.98, 
+                        wspace=0.25, hspace=0.25)
     
     for ax_name in ['yx', 'yz', 'xz']:
         for case_name, case_info in test_pressure_cases.items():
@@ -480,11 +479,38 @@ def runner(parameter_distributions=False):
                               linewidth = 1,
                               label=r'$p_{dyn}=$'+'{:.2f}'.format(case_info['p_dyn']))
         
-        axd[ax_name].set(xlim = (-150, 150),
-                         ylim = (-150, 150))
+        axd[ax_name].set(aspect='equal')
     
-    axd['yx'].set(ylim = tuple(reversed(axd['xz'].get_xlim())))
-    axd['xz'].set(xlim = tuple(reversed(axd['xz'].get_xlim())))
+    import matplotlib as mpl
+    
+    bounds = np.linspace(-45,45,10)
+    norm = mpl.colors.BoundaryNorm(bounds,10)
+    base_cmap = plt.get_cmap('coolwarm_r')
+    new_cmap_colors = []
+    for i in np.linspace(0,1,10-1):
+        new_cmap_colors.append(base_cmap(i))
+        
+    new_cmap = mpl.colors.ListedColormap(new_cmap_colors)
+        
+    axd['yx'].scatter(hourly_crossing_data['y_JSS'], hourly_crossing_data['x_JSS'],
+                      c = hourly_crossing_data['z_JSS'], cmap = new_cmap, norm = norm,
+                      edgecolors = 'black', linewidth=0.5, s = 12)
+    axd['yz'].scatter(hourly_crossing_data['y_JSS'], hourly_crossing_data['z_JSS'],
+                      c = hourly_crossing_data['x_JSS'], cmap = new_cmap, norm = norm,
+                      edgecolors = 'black', linewidth=0.5, s = 12)
+    axd['xz'].scatter(hourly_crossing_data['x_JSS'], hourly_crossing_data['z_JSS'],
+                      c = hourly_crossing_data['y_JSS'], cmap = new_cmap, norm = norm,
+                      edgecolors = 'black', linewidth=0.5, s = 12)
+    
+    cb = plt.colorbar(mpl.cm.ScalarMappable(norm = norm, cmap = new_cmap), cax=axd['cb'])
+    cb.ax.set_yticklabels([r'{:.1f}'.format(num) for num in bounds])
+    axd['cb'].set_ylabel(r'Distance from plane [$R_J$]')
+    
+    axd['yx'].set(xlim = (-125, 125), ylim = (100, -150))
+    axd['yz'].set(xlim = (-125, 125), ylim = (-125, 125))
+    axd['xz'].set(xlim = (100, -150), ylim = (-125, 125))
+    # axd['yx'].set(ylim = tuple(reversed(axd['xz'].get_xlim())))
+    # axd['xz'].set(xlim = tuple(reversed(axd['xz'].get_xlim())))
     
     plt.show()
     
