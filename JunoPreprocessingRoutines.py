@@ -21,6 +21,48 @@ paths_dict = paths_dict | {'JunoMetakernel': paths_dict['SPICE']/'juno/metakerne
                            'Louis2023_bowshock': paths_dict['data'] / 'boundary_crossings_caracteristics_BS.csv',
                            'Kurth_bowshock': paths_dict['data'] / 'Kurth_BowShocks_formatted.csv'}
 
+def make_CombinedCrossingsList(boundary = 'BS'):
+    import spiceypy as spice
+    
+    match boundary.lower():
+        case ('bs' | 'bowshock' | 'bow shock'):
+            crossing_data_Louis2023 = read_Louis2023_CrossingList(bs=True)
+            crossing_data_Louis2023['source'] = 'Louis+ (2023)'
+            
+            crossing_data_Kurth = read_Kurth_CrossingList(bs=True)
+            #   Dropping items which didn't have a clearly listed crossing direction
+            crossing_data_Kurth = crossing_data_Kurth[crossing_data_Kurth['direction'].notna()]
+            crossing_data_Kurth['source'] = 'Kurth (2024), p.c.'
+            
+            crossings_df = pd.concat([crossing_data_Louis2023, crossing_data_Kurth], axis=0, join="outer")
+        case ('mp' | 'magnetopause'):
+            crossing_data_Louis2023 = read_Louis2023_CrossingList(mp=True)
+            crossing_data_Louis2023['source'] = 'Louis+ (2023)'
+            
+            crossings_df = crossing_data_Louis2023
+        case _:
+            crossings_df = None
+    
+    crossings_df = crossings_df.drop(['date', 'time', 'DoY'], axis='columns')
+    crossings_df = crossings_df.drop(['x_IAU', 'y_IAU', 'z_IAU', 'r_IAU', 'theta_IAU', 'phi_IAU'], axis='columns')
+     
+    #   Load SPICE kernels for positions of Juno
+    spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
+    spice.furnsh(paths_dict['JunoMetakernel'].as_posix())
+    
+    R_J = spice.bodvcd(599, 'RADII', 3)[1][1]
+    
+    #   Get the positions at the hour, then half an hour before and after
+    df_ets = spice.datetime2et(crossings_df.index)
+    pos, lt = spice.spkpos('Juno', df_ets , 'Juno_JSS', 'None', 'Jupiter')
+    
+    spice.kclear()
+    
+    crossings_df[['x_JSS', 'y_JSS', 'z_JSS']] = pos / R_J
+    breakpoint()
+        
+    return crossing_data
+
 def make_HourlyCrossingList(df):
     """
     
