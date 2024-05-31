@@ -93,7 +93,9 @@ def make_HourlyCrossingList(df):
                               dt.timedelta(hours=t.minute//30) for t in df.index]
     
     #   Check if this hour is unique; if not, combine with others
-    df = df.groupby(['hourly_datetimes']).agg(direction=('direction', lambda x: x), notes=('notes', lambda x: x))
+    df = df.groupby(['hourly_datetimes']).agg(direction=('direction', lambda x: x.to_numpy()), 
+                                              notes=('notes', lambda x: x.to_numpy()), 
+                                              origin=('origin', lambda x: x.to_numpy()))
     
     #   Load SPICE kernels for positions of Juno
     spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
@@ -134,6 +136,7 @@ def read_Louis2023_CrossingList(mp=False, bs=True):
     crossings = pd.read_csv(crossing_list, sep=';', names=crossing_list_names, header=0)
     crossings.index = [dt.datetime.strptime(row['date']+'T'+row['time'], '%Y/%m/%dT%H:%M') for index, row in crossings.iterrows()]
     crossings = crossings.sort_index()
+    crossings['origin'] = 'Louis+ (2023)'
     return crossings
 
 def read_Kurth_CrossingList(bs=True):
@@ -147,7 +150,7 @@ def read_Kurth_CrossingList(bs=True):
     crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = 0)
     crossings.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for index, row in crossings.iterrows()]
     crossings = crossings.sort_index()
-    
+    crossings['origin'] = 'Kurth, p.c.'
     return crossings
 
 def plot_CrossingsAndTrajectories():
@@ -158,7 +161,7 @@ def plot_CrossingsAndTrajectories():
     import matplotlib.pyplot as plt
     
     mp_crossing_data = read_Louis2023_CrossingList(mp=True)
-    mp_crossing_data = make_HourlyCrossingList(mp_crossing_data.loc[:, ['direction', 'notes']])
+    mp_crossing_data = make_HourlyCrossingList(mp_crossing_data)
     
     #   Bow Shock Crossings
     bs_crossing_data_Louis2023 = read_Louis2023_CrossingList(bs=True)
@@ -167,7 +170,7 @@ def plot_CrossingsAndTrajectories():
     bs_crossing_data_Kurth = bs_crossing_data_Kurth[bs_crossing_data_Kurth['direction'].notna()]
     
     bs_crossing_data = pd.concat([bs_crossing_data_Louis2023, bs_crossing_data_Kurth], axis=0, join="outer")
-    bs_crossing_data = make_HourlyCrossingList(bs_crossing_data.loc[:, ['direction', 'notes']])
+    bs_crossing_data = make_HourlyCrossingList(bs_crossing_data)
     
     #   Load SPICE kernels for positions of Juno
     spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
@@ -223,8 +226,9 @@ def plot_CrossingsAndTrajectories():
         axs[0,0].annotate('Y-X Plane', (0, 1), (1, -1), ha='left',
                           xycoords='axes fraction', textcoords='offset fontsize')
         
-        axs[0,1].annotate('3D View WIP', (0, 1), (1, -1), ha='left',
-                          xycoords='axes fraction', textcoords='offset fontsize')
+        axs[0,1].set_axis_off()
+        # axs[0,1].annotate('3D View WIP', (0, 1), (1, -1), ha='left',
+        #                   xycoords='axes fraction', textcoords='offset fontsize')
         
         #
         bounds = np.logspace(-2, -1, 11)
