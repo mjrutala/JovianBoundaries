@@ -121,9 +121,10 @@ def find_JoyPressures(x, y, z, boundary='BS'):
             function = A(p) + B(p)*xi + C(p)*xi**2 + D(p)*yi + E(p)*yi**2 + F(p)*xi*yi - zi**2
             return abs(function)
     
-        res = minimize_scalar(Joy2002, bounds=(1e-5, 1e1), method='bounded')
+        res = minimize_scalar(Joy2002, bounds=(1e-5, 5e1), method='bounded')
         
         resulting_pressures.append(res.x)
-    breakpoint()
+    
+    return resulting_pressures
         
     
