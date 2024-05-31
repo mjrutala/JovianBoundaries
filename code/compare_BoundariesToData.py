@@ -55,9 +55,6 @@ def compare_MMESHToData():
     sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
     import spacecraftdata
     
-    sw_models = read_MMESH_Outputs()
-    inferred = read_Louis2023_CrossingList()
-    
     epochs = {}
     epochs['Pioneer11'] = {'spacecraft_name':'Pioneer 11',
                               'span':(dt.datetime(1977, 6, 3), dt.datetime(1977, 7, 29))}
@@ -94,181 +91,253 @@ def compare_MMESHToData():
     srf = read_SolarRadioFlux().rolling('9490h').mean().loc[:, 'adjusted_flux']
     data_df = data_df.merge(srf, how='outer', left_index=True, right_index=True)
     
-    #   Load the MME and the inferred pressures, as well
-    model = sw_models.loc[:, ('ensemble', 'p_dyn')]
+# =============================================================================
+#   Loading MME and Crossing Lists
+# =============================================================================
+    import JunoPreprocessingRoutines as PR 
+    import JoyBoundaryCoords as JBC
+    sw_mme_filepath = '/Users/mrutala/projects/JupiterBoundaries/mmesh_run/MMESH_atJupiter_20160301-20240301_withConstituentModels.csv'
     
-    #   Setup some standardized bins
-    pressure_bins = np.logspace(-3, 1, 41)
-    sfu_bins = np.linspace(0,300,16)
+    mp_crossing_data = PR.read_Louis2023_CrossingList(mp=True)
     
-    #   1: How do the measured and inferred p_dyn compare?
-    fig, ax = plt.subplots(figsize=(4,4))
+    bs_crossing_data_Louis2023 = PR.read_Louis2023_CrossingList(bs=True)
     
-    data_hist, bins = np.histogram(data_df['p_dyn'], bins=pressure_bins, 
-                                   density=True)
-    inferred_hist, bins = np.histogram(inferred['p_dyn'], bins=pressure_bins, 
-                                       density=True)
+    bs_crossing_data_Kurth = PR.read_Kurth_CrossingList(bs=True)
+    bs_crossing_data_Kurth = bs_crossing_data_Kurth[bs_crossing_data_Kurth['direction'].notna()]
     
-    #   Find the probability of a single inferred value
-    bin_widths = bins[1:] - bins[:-1]
-    agreement_index = bins[:-1] > np.min(inferred['p_dyn'])
-    agreement_prob = np.sum((data_hist * bin_widths)[agreement_index])
-    ax.annotate('Agreement Probability (Single Inference): {:.2f}%'.format(agreement_prob*100),
-                (0,1), (0,1), xycoords='axes fraction', textcoords='offset fontsize')
+    bs_crossing_data = pd.concat([bs_crossing_data_Louis2023, bs_crossing_data_Kurth], axis=0, join="outer")
     
-    ax.stairs(data_hist, bins, 
-              linewidth=2, 
-              label='Spacecraft Measurements')
-    ax.stairs(inferred_hist, bins, 
-              linewidth=2, 
-              label='Inferred (Joy+ 2002, Louis+ 2023)')
+    #   Only pass the datetime index, the direction of the crossing, and any notes
+    hourly_mp_crossing_data = PR.make_HourlyCrossingList(mp_crossing_data)
+    hourly_mp_crossing_data['p_dyn'] = JBC.find_JoyPressures(*hourly_mp_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T, 'MP')
     
-    ax.set(xlabel='Solar Wind Dynamic Pressure $(p_{dyn})$ [nPa]', xscale='log',
-           ylabel='Data Density')
-    ax.legend()
-    plt.show()
-    
-    #   2: How do the measured and inferred p_dyn compare if we only look at Juno-era?
-    fig, ax = plt.subplots(figsize=(4,4))
-    
-    temp_data_df = data_df[data_df.index > epochs['Juno']['span'][0]]
-    data_hist, bins = np.histogram(temp_data_df['p_dyn'], bins=pressure_bins, 
-                                   density=True)
-    inferred_hist, bins = np.histogram(inferred['p_dyn'], bins=pressure_bins, 
-                                       density=True)
-    
-    #   Find the probability of a single inferred value
-    bin_widths = bins[1:] - bins[:-1]
-    agreement_index = bins[:-1] > np.min(inferred['p_dyn'])
-    agreement_prob = np.sum((data_hist * bin_widths)[agreement_index])
-    ax.annotate('Agreement Probability (Single Inference): {:.2f}%'.format(agreement_prob*100),
-                (0,1), (0,1), xycoords='axes fraction', textcoords='offset fontsize')
-    
-    ax.stairs(data_hist, bins, 
-              linewidth=2, 
-              label='Juno Measurements')
-    ax.stairs(inferred_hist, bins, 
-              linewidth=2, 
-              label='Inferred (Joy+ 2002, Louis+ 2023)')
-    
-    ax.set(xlabel='Solar Wind Dynamic Pressure $(p_{dyn})$ [nPa]', xscale='log',
-           ylabel='Data Density')
-    ax.legend()
-    plt.show()
-    
-    #   3: How does measured p_dyn vary with the solar cycle?
-    fig, ax = plt.subplots(figsize=(4,4))
-    hist, xedges, yedges = np.histogram2d(data_df.dropna(how='any')['p_dyn'], 
-                                          data_df.dropna(how='any')['adjusted_flux'],
-                                          bins=[pressure_bins, sfu_bins],
-                                          density=True)
-    
-    pcm = ax.pcolormesh(xedges, yedges, hist.T, norm='log')
-    ax.set(xlabel='Measured Solar Wind Dynamic Pressure ($p_{dyn}$) [nPa]', xscale='log',
-           ylabel='13-month Mean Solar F10.7cm (Solar Cycle Phase) [SFU]')
-    
-    fig.colorbar(pcm, ax=ax, orientation='vertical', label='Data Density')
+    hourly_bs_crossing_data = PR.make_HourlyCrossingList(bs_crossing_data)
+    hourly_bs_crossing_data['p_dyn'] = JBC.find_JoyPressures(*hourly_bs_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T, 'BS')
 
-    plt.show()
+    #   Load the solar wind data and select the ensesmble
+    sw_models = MMESH_reader.fromFile(sw_mme_filepath)
+    sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
+    
+    
+# =============================================================================
+#     Plotting stuff
+# =============================================================================
+    #   Setup some standardized bins
+
+    
+    # #   1: How do the measured and inferred p_dyn compare?
+    # fig, ax = plt.subplots(figsize=(4,4))
+    
+    # data_hist, bins = np.histogram(data_df['p_dyn'], bins=pressure_bins, 
+    #                                density=True)
+    # inferred_hist, bins = np.histogram(inferred['p_dyn'], bins=pressure_bins, 
+    #                                    density=True)
+    
+    # #   Find the probability of a single inferred value
+    # bin_widths = bins[1:] - bins[:-1]
+    # agreement_index = bins[:-1] > np.min(inferred['p_dyn'])
+    # agreement_prob = np.sum((data_hist * bin_widths)[agreement_index])
+    # ax.annotate('Agreement Probability (Single Inference): {:.2f}%'.format(agreement_prob*100),
+    #             (0,1), (0,1), xycoords='axes fraction', textcoords='offset fontsize')
+    
+    # ax.stairs(data_hist, bins, 
+    #           linewidth=2, 
+    #           label='Spacecraft Measurements')
+    # ax.stairs(inferred_hist, bins, 
+    #           linewidth=2, 
+    #           label='Inferred (Joy+ 2002, Louis+ 2023)')
+    
+    # ax.set(xlabel='Solar Wind Dynamic Pressure $(p_{dyn})$ [nPa]', xscale='log',
+    #        ylabel='Data Density')
+    # ax.legend()
+    # plt.show()
+    
+    # breakpoint()
+    
+    # #   2: How do the measured and inferred p_dyn compare if we only look at Juno-era?
+    # fig, ax = plt.subplots(figsize=(4,4))
+    
+    # temp_data_df = data_df[data_df.index > epochs['Juno']['span'][0]]
+    # data_hist, bins = np.histogram(temp_data_df['p_dyn'], bins=pressure_bins, 
+    #                                density=True)
+    # inferred_hist, bins = np.histogram(inferred['p_dyn'], bins=pressure_bins, 
+    #                                    density=True)
+    
+    # #   Find the probability of a single inferred value
+    # bin_widths = bins[1:] - bins[:-1]
+    # agreement_index = bins[:-1] > np.min(inferred['p_dyn'])
+    # agreement_prob = np.sum((data_hist * bin_widths)[agreement_index])
+    # ax.annotate('Agreement Probability (Single Inference): {:.2f}%'.format(agreement_prob*100),
+    #             (0,1), (0,1), xycoords='axes fraction', textcoords='offset fontsize')
+    
+    # ax.stairs(data_hist, bins, 
+    #           linewidth=2, 
+    #           label='Juno Measurements')
+    # ax.stairs(inferred_hist, bins, 
+    #           linewidth=2, 
+    #           label='Inferred (Joy+ 2002, Louis+ 2023)')
+    
+    # ax.set(xlabel='Solar Wind Dynamic Pressure $(p_{dyn})$ [nPa]', xscale='log',
+    #        ylabel='Data Density')
+    # ax.legend()
+    # plt.show()
+    
+    # #   3: How does measured p_dyn vary with the solar cycle?
+    # fig, ax = plt.subplots(figsize=(4,4))
+    # hist, xedges, yedges = np.histogram2d(data_df.dropna(how='any')['p_dyn'], 
+    #                                       data_df.dropna(how='any')['adjusted_flux'],
+    #                                       bins=[pressure_bins, sfu_bins],
+    #                                       density=True)
+    
+    # pcm = ax.pcolormesh(xedges, yedges, hist.T, norm='log')
+    # ax.set(xlabel='Measured Solar Wind Dynamic Pressure ($p_{dyn}$) [nPa]', xscale='log',
+    #        ylabel='13-month Mean Solar F10.7cm (Solar Cycle Phase) [SFU]')
+    
+    # fig.colorbar(pcm, ax=ax, orientation='vertical', label='Data Density')
+
+    # plt.show()
     
     #   4: How does an MME stack up?
+    pressure_bins = np.logspace(-3, 1, 41)
+    sfu_bins = np.linspace(0,300,16)
     fig, ax = plt.subplots(figsize=(4,4))
 
     data_hist, _ = np.histogram(data_df['p_dyn'], pressure_bins, density=True)
-    model_hist, _ = np.histogram(sw_models.loc[:, ('ensemble', 'p_dyn')], pressure_bins, density=True)
-    inferred_hist, bins = np.histogram(inferred['p_dyn'], pressure_bins, density=True)
+    model_hist, _ = np.histogram(sw_mme['p_dyn'], pressure_bins, density=True)
+    combined_inferred_p_dyn = np.concatenate([hourly_bs_crossing_data['p_dyn'].to_numpy(), 
+                                        hourly_mp_crossing_data['p_dyn'].to_numpy()])
+    inferred_hist, bins = np.histogram(combined_inferred_p_dyn, pressure_bins, density=True)
     
-    #ks = scipy.stats.kstest(data, model)
-    #print(ks)
-    
-    ax.stairs(data_hist, bins, linewidth=2, label='Spacecraft Measurements')
-    ax.stairs(inferred_hist, bins, linewidth=2, label='Inferred (Joy+ 2002, Louis+ 2023)')
-    ax.stairs(model_hist, bins, linewidth=2, label='MME')
+    ax.stairs(data_hist, bins, linewidth=2, label='Spacecraft Measurements', color='C0')
+    ax.stairs(inferred_hist, bins, linewidth=2, label='Inferred w/ Joy+ (2002)', color='xkcd:lavender')
+    ax.stairs(model_hist, bins, linewidth=2, label='MME', color='C3')
     ax.set(xlabel='Solar Wind Dynamic Pressure $(p_{dyn})$ [nPa]', xscale='log',
+           ylabel='Data Density')
+
+    ax.legend()
+    plt.show()
+    
+    pressure_bins = np.linspace(-3, 1, 41)
+    
+    fig, ax = plt.subplots(figsize=(4,4))
+
+    data_hist, _ = np.histogram(np.log10(data_df['p_dyn']), pressure_bins, density=True)
+    
+    combined_mme_p_dyn = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+                                         sw_mme['p_dyn'],
+                                         sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
+    model_hist, _ = np.histogram(np.log10(combined_mme_p_dyn), pressure_bins, density=True)
+   
+    combined_inferred_p_dyn = np.concatenate([hourly_bs_crossing_data['p_dyn'].to_numpy(), 
+                                        hourly_mp_crossing_data['p_dyn'].to_numpy()])
+    inferred_hist, bins = np.histogram(np.log10(combined_inferred_p_dyn), pressure_bins, density=True)
+    
+    ax.stairs(data_hist, bins, linewidth=2, label='Spacecraft Measurements', color='C0')
+    ax.stairs(inferred_hist, bins, linewidth=2, label='Inferred w/ Joy+ (2002)', color='xkcd:lavender')
+    ax.stairs(model_hist, bins, linewidth=2, label='MME', color='C4')
+    ax.set(xlabel='Log Solar Wind Dynamic Pressure $\mathrm{log}_{10}(p_{dyn}/nPa)$',
            ylabel='Data Density')
 
     ax.legend()
     plt.show()
     
     breakpoint()
+    return
 
-def compare_MMESHToData_Overlapping():
-    import scipy
-    import numpy as np
+# def compare_MMESHToData_Overlapping():
+#     import scipy
+#     import numpy as np
     
-    import sys
-    sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
-    import spacecraftdata
+#     import sys
+#     sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
+#     import spacecraftdata
     
-    sw_models = read_MMESH_Outputs()
-    bs_crossings_Louis2023 = read_Louis2023_CrossingList()
+#     epochs = {}
+#     epochs['Pioneer11'] = {'spacecraft_name':'Pioneer 11',
+#                               'span':(dt.datetime(1977, 6, 3), dt.datetime(1977, 7, 29))}
+#     epochs['Voyager1'] = {'spacecraft_name':'Voyager 1',
+#                               'span':(dt.datetime(1979, 1, 3), dt.datetime(1979, 5, 5))}
+#     epochs['Voyager2'] = {'spacecraft_name':'Voyager 2',
+#                               'span':(dt.datetime(1979, 3, 30), dt.datetime(1979, 8, 20))}
+#     epochs['Ulysses_01']  = {'spacecraft_name':'Ulysses',
+#                               'span':(dt.datetime(1991,12, 8), dt.datetime(1992, 2, 2))}
+#     epochs['Ulysses_02']  = {'spacecraft_name':'Ulysses',
+#                               'span':(dt.datetime(1997, 8,14), dt.datetime(1998, 4,16))}
+#     epochs['Ulysses_03']  = {'spacecraft_name':'Ulysses',
+#                               'span':(dt.datetime(2003,10,24), dt.datetime(2004, 6,22))}
+#     epochs['Juno']     = {'spacecraft_name':'Juno',
+#                               'span':(dt.datetime(2016, 5,16), dt.datetime(2016, 6,26))}
     
-    epochs = {}
-    epochs['Pioneer11'] = {'spacecraft_name':'Pioneer 11',
-                              'span':(dt.datetime(1977, 6, 3), dt.datetime(1977, 7, 29))}
-    epochs['Voyager1'] = {'spacecraft_name':'Voyager 1',
-                              'span':(dt.datetime(1979, 1, 3), dt.datetime(1979, 5, 5))}
-    epochs['Voyager2'] = {'spacecraft_name':'Voyager 2',
-                              'span':(dt.datetime(1979, 3, 30), dt.datetime(1979, 8, 20))}
-    epochs['Ulysses_01']  = {'spacecraft_name':'Ulysses',
-                              'span':(dt.datetime(1991,12, 8), dt.datetime(1992, 2, 2))}
-    epochs['Ulysses_02']  = {'spacecraft_name':'Ulysses',
-                              'span':(dt.datetime(1997, 8,14), dt.datetime(1998, 4,16))}
-    epochs['Ulysses_03']  = {'spacecraft_name':'Ulysses',
-                              'span':(dt.datetime(2003,10,24), dt.datetime(2004, 6,22))}
-    epochs['Juno']     = {'spacecraft_name':'Juno',
-                              'span':(dt.datetime(2016, 5,16), dt.datetime(2016, 6,26))}
-    
-    #  Load spacecraft data
-    for interval, info in epochs.items():
-        spacecraft = spacecraftdata.SpacecraftData(info['spacecraft_name'])
-        starttime, stoptime = info['span']
-        spacecraft.read_processeddata(starttime, stoptime, resolution='60Min')
+#     #  Load spacecraft data
+#     for interval, info in epochs.items():
+#         spacecraft = spacecraftdata.SpacecraftData(info['spacecraft_name'])
+#         starttime, stoptime = info['span']
+#         spacecraft.read_processeddata(starttime, stoptime, resolution='60Min')
         
-        data = spacecraft.data['p_dyn'].dropna()
-        #model = sw_models.loc[spacecraft.data.index, ('ensemble', 'p_dyn')]
-        model = sw_models.loc[:, ('ensemble', 'p_dyn')]
-        inferred = bs_crossings_Louis2023['p_dyn']
-        breakpoint()
-        bins = np.logspace(-3,1,41)
-        data_hist, _ = np.histogram(data, bins, density=True)
-        model_hist, _ = np.histogram(model, bins, density=True)
-        inferred_hist, bins = np.histogram(inferred, bins, density=True)
+#         breakpoint()
         
-        ks = scipy.stats.kstest(data, model)
-        print(ks)
+#         data = spacecraft.data['p_dyn'].dropna()
+#         #model = sw_models.loc[spacecraft.data.index, ('ensemble', 'p_dyn')]
+#         model = sw_models.loc[:, ('ensemble', 'p_dyn')]
+#         inferred = bs_crossings_Louis2023['p_dyn']
+#         breakpoint()
+#         bins = np.logspace(-3,1,41)
+#         data_hist, _ = np.histogram(data, bins, density=True)
+#         model_hist, _ = np.histogram(model, bins, density=True)
+#         inferred_hist, bins = np.histogram(inferred, bins, density=True)
         
-        data_kde = scipy.stats.gaussian_kde(data.to_numpy('float64'))
+#         ks = scipy.stats.kstest(data, model)
+#         print(ks)
         
-        model_kde = scipy.stats.gaussian_kde(sw_models.loc[spacecraft.data.index, ('ensemble', 'u_mag')].to_numpy('float64'))
+#         data_kde = scipy.stats.gaussian_kde(data.to_numpy('float64'))
         
-        fig, ax = plt.subplots()
+#         model_kde = scipy.stats.gaussian_kde(sw_models.loc[spacecraft.data.index, ('ensemble', 'u_mag')].to_numpy('float64'))
         
-        ax.stairs(data_hist, bins, linewidth=2, label='Data (Juno)')
-        ax.stairs(model_hist, bins, linewidth=2, label='MME')
-        ax.stairs(inferred_hist, bins, linewidth=2, label='Louis+ 2023 (Inferred)')
-        ax.set(xscale='log')
+#         fig, ax = plt.subplots()
         
-        # x = np.linspace(200,800,601)    
-        # ax.plot(x, data_kde.evaluate(x), linewidth=2, label='Data')
-        # ax.plot(x, model_kde.evaluate(x), linewidth=2, label='Model')
+#         ax.stairs(data_hist, bins, linewidth=2, label='Data (Juno)')
+#         ax.stairs(model_hist, bins, linewidth=2, label='MME')
+#         ax.stairs(inferred_hist, bins, linewidth=2, label='Louis+ 2023 (Inferred)')
+#         ax.set(xscale='log')
         
-        ax.legend()
-        plt.show()
+#         # x = np.linspace(200,800,601)    
+#         # ax.plot(x, data_kde.evaluate(x), linewidth=2, label='Data')
+#         # ax.plot(x, model_kde.evaluate(x), linewidth=2, label='Model')
         
-        breakpoint()
+#         ax.legend()
+#         plt.show()
+        
+#         breakpoint()
 
 
 def compare_Pressures():
+    import JunoPreprocessingRoutines as PR 
+    import JoyBoundaryCoords as JBC
+    sw_mme_filepath = '/Users/mrutala/projects/JupiterBoundaries/mmesh_run/MMESH_atJupiter_20160301-20240301_withConstituentModels.csv'
     
+    mp_crossing_data = PR.read_Louis2023_CrossingList(mp=True)
     
+    bs_crossing_data_Louis2023 = PR.read_Louis2023_CrossingList(bs=True)
     
-    model = read_MMESH_Outputs()
-    bs_crossings = read_Louis2023_CrossingList(bs=True)
-    mp_crossings = read_Louis2023_CrossingList(mp=True)
+    bs_crossing_data_Kurth = PR.read_Kurth_CrossingList(bs=True)
+    bs_crossing_data_Kurth = bs_crossing_data_Kurth[bs_crossing_data_Kurth['direction'].notna()]
+    
+    bs_crossing_data = pd.concat([bs_crossing_data_Louis2023, bs_crossing_data_Kurth], axis=0, join="outer")
+    
+    #   Only pass the datetime index, the direction of the crossing, and any notes
+    hourly_mp_crossing_data = PR.make_HourlyCrossingList(mp_crossing_data)
+    hourly_mp_crossing_data['p_dyn'] = JBC.find_JoyPressures(*hourly_mp_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T, 'MP')
+    
+    hourly_bs_crossing_data = PR.make_HourlyCrossingList(bs_crossing_data)
+    hourly_bs_crossing_data['p_dyn'] = JBC.find_JoyPressures(*hourly_bs_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T, 'BS')
 
-    fig, ax = plt.subplots(figsize=(12, 2), nrows=1)
-    plt.subplots_adjust(bottom=0.15, left=0.05625, right=1-0.00625, top=0.85, 
+    #   Load the solar wind data and select the ensesmble
+    sw_models = MMESH_reader.fromFile(sw_mme_filepath)
+    sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
+
+
+    fig, ax = plt.subplots(figsize=(8, 3), nrows=1)
+    plt.subplots_adjust(bottom=0.15, left=0.075, right=1-0.00625, top=0.85, 
                         wspace=0.025)
     
     for axis in ['top','bottom','left','right']:
@@ -276,25 +345,33 @@ def compare_Pressures():
     ax.tick_params(width=2, which='major')
     ax.tick_params(width=1.5, which='minor')
     
-    ax.scatter(mp_crossings.index, mp_crossings['p_dyn'],
-               marker='o', color='xkcd:blue purple', s=16,
-               label=r'Pressures Inferred from $\it{Juno}$ MP Crossings & Joy+ 2002 Model')
+    mp_color_dict = {'Louis+ (2023)': 'xkcd:raspberry'}
+    colors = [mp_color_dict[origin[0]] for origin in hourly_mp_crossing_data['origin'].to_numpy()]
+    ax.scatter(hourly_mp_crossing_data.index, hourly_mp_crossing_data['p_dyn'],
+               marker='o', c=colors, s=18,
+               label=r'Magnetopause Crossing (Louis+ (2023))')
     
-    ax.scatter(bs_crossings.index, bs_crossings['p_dyn'], 
-               marker='x', color='xkcd:raspberry', s=16,
-               label=r'Pressures Inferred from $\it{Juno}$ BS Crossings & Joy+ 2002 Model')
+    bs_color_dict = {'Louis+ (2023)': 'xkcd:lavender',
+                     'Kurth, p.c.': 'xkcd:blue purple'}
+    colors = [bs_color_dict[origin[0]] for origin in hourly_bs_crossing_data['origin'].to_numpy()]
     
-    ax.plot(model[('ensemble', 'p_dyn')].index, model[('ensemble', 'p_dyn')], 
-            color='C3', linewidth=2, label='MME')
-    ax.fill_between(model[('ensemble', 'p_dyn')].index,
-                    model[('ensemble', 'p_dyn')] - model[('ensemble', 'p_dyn_neg_unc')],
-                    model[('ensemble', 'p_dyn')] + model[('ensemble', 'p_dyn_pos_unc')],
-                    color='C3', alpha=0.5)
+    for key in bs_color_dict.keys():
+        indx = (np.array(colors) == bs_color_dict[key])
+        ax.scatter(hourly_bs_crossing_data.index.to_numpy()[indx], hourly_bs_crossing_data['p_dyn'].to_numpy()[indx], 
+                   marker='x', c=np.array(colors)[indx], s=18,
+                   label='Bow Shock Crossing ({})'.format(key))
+    
+    ax.plot(sw_mme.index, sw_mme['p_dyn'], 
+            color='C4', linewidth=2, label='MME')
+    ax.fill_between(sw_mme.index,
+                    sw_mme['p_dyn'] - sw_mme['p_dyn_neg_unc'],
+                    sw_mme['p_dyn'] + sw_mme['p_dyn_pos_unc'],
+                    color='C4', alpha=0.5)
     
     ax.set(yscale='log', 
-           xlim = [dt.datetime(2016, 7, 4), dt.datetime(2024, 3, 1)])
+           xlabel = 'Year', xlim = [dt.datetime(2016, 7, 4), dt.datetime(2024, 3, 1)])
     
-    ax.legend(ncols=3, loc='lower center', bbox_to_anchor = (0.5, 1.0), fancybox=True)
+    ax.legend(ncols=4, loc='lower right', bbox_to_anchor = (1.0, 1.0), fancybox=True)
     ax.set_ylabel('Pressure [nPa]')
     
     plt.savefig('/Users/mrutala/projects/MMESH/testing/figures/poster07_JoyComparison.png',
@@ -330,8 +407,17 @@ def runner(parameter_distributions=False):
     
     #   Select boundary model
     boundary_models = {'Shuelike': {'model': boundaries.Shuelike, 
-                                    'params': ['r0', 'r1', 'a0', 'a1', 'a2'], 
-                                    'guess': [60, -0.15, 0.5, 1.0, 1.0]},
+                                    'params': ['r0', 'r1', 'a0', 'a1'], 
+                                    'guess': [60, -0.15, 0.5, 1.0]},
+                       'Shuelike_UniformPressureExponent': {'model': boundaries.Shuelike_UniformPressureExponent, 
+                                                       'params': ['r0', 'r1', 'a0', 'a1'], 
+                                                       'guess': [60, -0.15, 0.5, 1.0]},
+                       'Shuelike_NonuniformPressureExponent': {'model': boundaries.Shuelike_NonuniformPressureExponent, 
+                                                       'params': ['r0', 'r1', 'a0', 'a1', 'a2'], 
+                                                       'guess': [60, -0.15, 0.5, 1.0, 1.0]},
+                       'Shuelike_AsymmetryCase1': {'model': boundaries.Shuelike_AsymmetryCase1, 
+                                                       'params': ['r0', 'r1', 'r2', 'r3', 'a0', 'a1'], 
+                                                       'guess': [60, -0.15, 5, 5, 0.5, 1.0]},
                        'Shuelike_Asymmetric': {'model': boundaries.Shuelike_Asymmetric, 
                                                        'params': ['r0', 'r1', 'r2', 'a0', 'a1', 'a2'], 
                                                        'guess': [60, -0.15, 1, 0.5, 1.0, 1.0]},
@@ -340,7 +426,7 @@ def runner(parameter_distributions=False):
                                    'guess': [-0.134, 0.488, -0.581, -0.225, -0.186, -0.016, -0.014, 0.096, -0.814,  -0.811, -0.050, 0.168]}
                        }
     #boundary_model = boundary_models['Shuelike']
-    boundary_model = boundary_models['Shuelike']
+    boundary_model = boundary_models['Shuelike_AsymmetryCase1']
     
     # Here: add a loop for MC and a function which perturbs the variables
     n_mc = 1000
@@ -459,7 +545,8 @@ def runner(parameter_distributions=False):
     fig, axd = plt.subplot_mosaic(
         [['yx', '3d', 'cb'],
          ['yz', 'xz', 'cb']],
-        figsize=(6,5), width_ratios = [1, 1, 0.1])
+        figsize=(6,5), width_ratios = [1, 1, 0.1],
+        per_subplot_kw = {'3d': {'projection': '3d'}})
     plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.98, 
                         wspace=0.25, hspace=0.25)
     
@@ -481,6 +568,17 @@ def runner(parameter_distributions=False):
         
         axd[ax_name].set(aspect='equal')
     
+    #   Get residuals
+    xyz_data = hourly_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T
+    rtp_data = boundaries.convert_CartesianToSphericalSolar(*xyz_data)
+    p_dyn_data = sw_mme.loc[hourly_crossing_data.index]['p_dyn'].to_numpy()
+    
+    r_estimate = boundary_model['model'](median_parameters, 
+                                         [rtp_data[1], rtp_data[2], p_dyn_data])
+    residuals = rtp_data[0] - r_estimate
+          
+    
+    
     import matplotlib as mpl
     
     bounds = np.linspace(-45,45,10)
@@ -492,6 +590,7 @@ def runner(parameter_distributions=False):
         
     new_cmap = mpl.colors.ListedColormap(new_cmap_colors)
         
+    #   Color according to 3rd dimension
     axd['yx'].scatter(hourly_crossing_data['y_JSS'], hourly_crossing_data['x_JSS'],
                       c = hourly_crossing_data['z_JSS'], cmap = new_cmap, norm = norm,
                       edgecolors = 'black', linewidth=0.5, s = 12)
@@ -501,16 +600,65 @@ def runner(parameter_distributions=False):
     axd['xz'].scatter(hourly_crossing_data['x_JSS'], hourly_crossing_data['z_JSS'],
                       c = hourly_crossing_data['y_JSS'], cmap = new_cmap, norm = norm,
                       edgecolors = 'black', linewidth=0.5, s = 12)
-    
     cb = plt.colorbar(mpl.cm.ScalarMappable(norm = norm, cmap = new_cmap), cax=axd['cb'])
     cb.ax.set_yticklabels([r'{:.1f}'.format(num) for num in bounds])
     axd['cb'].set_ylabel(r'Distance from plane [$R_J$]')
     
-    axd['yx'].set(xlim = (-125, 125), ylim = (100, -150))
-    axd['yz'].set(xlim = (-125, 125), ylim = (-125, 125))
-    axd['xz'].set(xlim = (100, -150), ylim = (-125, 125))
+    
+    # #   Color according to residuals
+    # norm = norm = mpl.colors.CenteredNorm(halfrange=40)
+    # axd['yx'].scatter(hourly_crossing_data['y_JSS'], hourly_crossing_data['x_JSS'],
+    #                   c = residuals, cmap = 'coolwarm_r', norm = norm,
+    #                   edgecolors = 'black', linewidth=0.5, s = 12)
+    # axd['yz'].scatter(hourly_crossing_data['y_JSS'], hourly_crossing_data['z_JSS'],
+    #                   c = residuals, cmap = 'coolwarm_r', norm = norm,
+    #                   edgecolors = 'black', linewidth=0.5, s = 12)
+    # axd['xz'].scatter(hourly_crossing_data['x_JSS'], hourly_crossing_data['z_JSS'],
+    #                   c = residuals, cmap = 'coolwarm_r', norm = norm,
+    #                   edgecolors = 'black', linewidth=0.5, s = 12)
+    # cb = plt.colorbar(mpl.cm.ScalarMappable(norm = norm, cmap = 'coolwarm_r'), cax=axd['cb'])
+    # axd['cb'].set_ylabel(r'Residuals in Radial Distance [$R_J$]')
+    
+    axd['yx'].set(xlim = (-125, 125), 
+                  ylabel = r'$x_{JSS}/R_J$ (+ sunward)', ylim = (100, -150))
+    axd['yz'].set(xlabel = r'$y_{JSS}/R_J$ (+ duskward)', xlim = (-125, 125), 
+                  ylabel = r'$z_{JSS}/R_J$ (+ northward)', ylim = (-125, 125))
+    axd['xz'].set(xlabel = r'$x_{JSS}/R_J$ (+ sunward)', xlim = (100, -150), 
+                  ylim = (-125, 125))
     # axd['yx'].set(ylim = tuple(reversed(axd['xz'].get_xlim())))
     # axd['xz'].set(xlim = tuple(reversed(axd['xz'].get_xlim())))
+    
+    
+    t = np.linspace(0, 180, 1000) * np.pi/180
+    p = np.linspace(0, 360, 1000) * np.pi/180
+    t_grid, p_grid = np.meshgrid(t, p)
+    p_dyn_grid = np.zeros((1000,1000)) + test_pressure_cases['2']['p_dyn']
+    r_grid = boundary_model['model'](median_parameters, [t_grid, p_grid, p_dyn_grid])
+    x_grid, y_grid, z_grid = boundaries.convert_SphericalSolarToCartesian(r_grid, t_grid, p_grid)
+    
+    axd['3d'].view_init(elev=30, azim=225, roll=0)
+    axd['3d'].set(xlabel = r'$x_{JSS}/R_J$ (+ sunward)', xlim = (100, -150), 
+                  ylabel = r'$y_{JSS}/R_J$ (+ duskward)', ylim = (125, -125), 
+                  zlabel = r'$z_{JSS}/R_J$ (+ northward)', zlim = (-125, 125))
+    
+    clip_indx = ((z_grid < 0) | (x_grid < -150))
+    x_grid[clip_indx] = np.nan
+    y_grid[clip_indx] = np.nan
+    z_grid[clip_indx] = np.nan
+    
+    axd['3d'].plot_wireframe(x_grid, y_grid, z_grid, rstride=50, cstride=50,
+                              linewidth=1.0, alpha=0.5, color='xkcd:indigo')
+    # axd['3d'].plot_surface(x_grid, y_grid, z_grid,
+    #                        linewidth=0.5, color='C3', alpha=0.5)
+    
+    # axd['3d'].scatter(hourly_crossing_data['x_JSS'], hourly_crossing_data['y_JSS'], hourly_crossing_data['z_JSS'],
+    #                   color = 'C2',
+    #                   edgecolors = 'black', linewidth=0.5, s = 12)
+    
+    axd['3d'].scatter(hourly_crossing_data['x_JSS'], hourly_crossing_data['y_JSS'], hourly_crossing_data['z_JSS'],
+                      c = residuals, cmap='coolwarm_r', norm = norm,
+                      edgecolors = 'black', linewidth=0.5, s = 12)
+    
     
     plt.show()
     
