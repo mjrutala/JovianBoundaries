@@ -10,8 +10,10 @@ import pandas as pd
 import datetime as dt
 
 import sys
-sys.path.append('/Users/mrutala/projects/MMESH/')
+sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
 import MMESH_reader
+
+import boundaries
 
 paths_dict = {'data': Path('/Users/mrutala/projects/JupiterBoundaries/data/'),
               'SPICE': Path('/Users/mrutala/SPICE/')}
@@ -27,17 +29,14 @@ def make_CombinedCrossingsList(boundary = 'BS'):
     match boundary.lower():
         case ('bs' | 'bowshock' | 'bow shock'):
             crossing_data_Louis2023 = read_Louis2023_CrossingList(bs=True)
-            crossing_data_Louis2023['source'] = 'Louis+ (2023)'
             
             crossing_data_Kurth = read_Kurth_CrossingList(bs=True)
             #   Dropping items which didn't have a clearly listed crossing direction
             crossing_data_Kurth = crossing_data_Kurth[crossing_data_Kurth['direction'].notna()]
-            crossing_data_Kurth['source'] = 'Kurth (2024), p.c.'
             
             crossings_df = pd.concat([crossing_data_Louis2023, crossing_data_Kurth], axis=0, join="outer")
         case ('mp' | 'magnetopause'):
             crossing_data_Louis2023 = read_Louis2023_CrossingList(mp=True)
-            crossing_data_Louis2023['source'] = 'Louis+ (2023)'
             
             crossings_df = crossing_data_Louis2023
         case _:
@@ -52,16 +51,15 @@ def make_CombinedCrossingsList(boundary = 'BS'):
     
     R_J = spice.bodvcd(599, 'RADII', 3)[1][1]
     
-    #   Get the positions at the hour, then half an hour before and after
+    #   Get the positions at all time stamps
     df_ets = spice.datetime2et(crossings_df.index)
     pos, lt = spice.spkpos('Juno', df_ets , 'Juno_JSS', 'None', 'Jupiter')
     
     spice.kclear()
     
     crossings_df[['x_JSS', 'y_JSS', 'z_JSS']] = pos / R_J
-    breakpoint()
         
-    return crossing_data
+    return crossings_df
 
 def make_HourlyCrossingList(df):
     """
@@ -262,5 +260,35 @@ def plot_CrossingsAndTrajectories():
     
     breakpoint()
 
+def analyze_RhoDistributions():
+    import spiceypy as spice
     
+    crossings_df = make_CombinedCrossingsList(boundary = 'MP')
     
+    rho, phi, ell = boundaries.convert_CartesianToCylindricalSolar(*mp_crossings.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
+    
+    #   Load SPICE kernels for positions of Juno
+    spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
+    spice.furnsh(paths_dict['JunoMetakernel'].as_posix())
+    
+    R_J = spice.bodvcd(599, 'RADII', 3)[1][1]
+    
+    #   Get all hourly trajectory info
+    earliest_time = min(crossings_df.index)
+    latest_time = max(crossings_df.index)
+     
+    datetimes = np.arange(pd.Timestamp(earliest_time).replace(minute=0, second=0, nanosecond=0),
+                          pd.Timestamp(latest_time).replace(minute=0, second=0, nanosecond=0) + dt.timedelta(hours=1),
+                          dt.timedelta(hours=1)).astype(dt.datetime)
+     
+    ets = spice.datetime2et(datetimes)
+     
+    pos, lt = spice.spkpos('Juno', ets, 'Juno_JSS', 'None', 'Jupiter')
+    pos = pos.T / R_J
+    pos_df = pd.DataFrame({'x': pos[0], 'y': pos[1], 'z':pos[2]}, 
+                           ndex=datetimes)
+     
+    spice.kclear()
+    
+    breakpoint()
+        
