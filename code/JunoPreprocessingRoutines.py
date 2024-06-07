@@ -15,14 +15,17 @@ import MMESH_reader
 
 import boundaries
 
-paths_dict = {'data': Path('/Users/mrutala/projects/JupiterBoundaries/data/'),
-              'SPICE': Path('/Users/mrutala/SPICE/')}
-paths_dict = paths_dict | {'JunoMetakernel': paths_dict['SPICE']/'juno/metakernel_juno.txt',
-                           'PlanetaryMetakernel': paths_dict['SPICE']/'generic/metakernel_planetary.txt', 
-                           'Louis2023_magnetopause': paths_dict['data'] / 'boundary_crossings_caracteristics_MP.csv', 
-                           'Louis2023_bowshock': paths_dict['data'] / 'boundary_crossings_caracteristics_BS.csv',
-                           'Kurth_bowshock': paths_dict['data'] / 'Kurth_BowShocks_formatted.csv'}
-
+def get_paths():
+    paths_dict = {'data': Path('/Users/mrutala/projects/JupiterBoundaries/data/'),
+                  'SPICE': Path('/Users/mrutala/SPICE/')}
+    paths_dict = paths_dict | {'JunoMetakernel': paths_dict['SPICE']/'juno/metakernel_juno.txt',
+                               'PlanetaryMetakernel': paths_dict['SPICE']/'generic/metakernel_planetary.txt', 
+                               'Louis2023_magnetopause': paths_dict['data'] / 'boundary_crossings_caracteristics_MP.csv', 
+                               'Louis2023_bowshock': paths_dict['data'] / 'boundary_crossings_caracteristics_BS.csv',
+                               'Kurth_bowshock': paths_dict['data'] / 'Kurth_BowShocks_formatted.csv'}
+    
+    return paths_dict
+    
 def make_CombinedCrossingsList(boundary = 'BS'):
     import spiceypy as spice
     
@@ -46,8 +49,8 @@ def make_CombinedCrossingsList(boundary = 'BS'):
     crossings_df = crossings_df.drop(['x_IAU', 'y_IAU', 'z_IAU', 'r_IAU', 'theta_IAU', 'phi_IAU'], axis='columns')
      
     #   Load SPICE kernels for positions of Juno
-    spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
-    spice.furnsh(paths_dict['JunoMetakernel'].as_posix())
+    spice.furnsh(get_paths()['PlanetaryMetakernel'].as_posix())
+    spice.furnsh(get_paths()['JunoMetakernel'].as_posix())
     
     R_J = spice.bodvcd(599, 'RADII', 3)[1][1]
     
@@ -87,8 +90,7 @@ def make_HourlyCrossingList(df):
     df['notes'] = df['notes'].fillna('null')
     
     #   Get the nearest hour to hourly precision
-    df['hourly_datetimes'] = [t.replace(minute=0, second=0, microsecond=0) + 
-                              dt.timedelta(hours=t.minute//30) for t in df.index]
+    df['hourly_datetimes'] = get_HourlyFromDatetimes(df.index)
     
     #   Check if this hour is unique; if not, combine with others
     df = df.groupby(['hourly_datetimes']).agg(direction=('direction', lambda x: x.to_numpy()), 
@@ -96,8 +98,8 @@ def make_HourlyCrossingList(df):
                                               origin=('origin', lambda x: x.to_numpy()))
     
     #   Load SPICE kernels for positions of Juno
-    spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
-    spice.furnsh(paths_dict['JunoMetakernel'].as_posix())
+    spice.furnsh(get_paths()['PlanetaryMetakernel'].as_posix())
+    spice.furnsh(get_paths()['JunoMetakernel'].as_posix())
     
     #   Get the positions at the hour, then half an hour before and after
     df_ets = spice.datetime2et(df.index)
@@ -121,11 +123,17 @@ def make_HourlyCrossingList(df):
     
     return df
 
+def get_HourlyFromDatetimes(ts):
+    #   Get the nearest hour to hourly precision
+    res = [t.replace(minute=0, second=0, microsecond=0) + 
+               dt.timedelta(hours=t.minute//30) for t in ts]
+    return res
+
 def read_Louis2023_CrossingList(mp=False, bs=True):
     if mp == True:
-        crossing_list = paths_dict['Louis2023_magnetopause']
+        crossing_list = get_paths()['Louis2023_magnetopause']
     else:
-        crossing_list = paths_dict['Louis2023_bowshock']
+        crossing_list = get_paths()['Louis2023_bowshock']
         
     crossing_list_names = ['#', 'DoY', 'date', 'time', 'boundary',  'direction', 'notes', 
                            'x_JSS', 'y_JSS', 'z_JSS', 
@@ -139,7 +147,7 @@ def read_Louis2023_CrossingList(mp=False, bs=True):
 
 def read_Kurth_CrossingList(bs=True):
     if bs == True:
-        crossing_list = paths_dict['Kurth_bowshock']
+        crossing_list = get_paths()['Kurth_bowshock']
     else:
         print("No magnetopause crossings available from this function!")
         return
@@ -171,8 +179,8 @@ def plot_CrossingsAndTrajectories():
     bs_crossing_data = make_HourlyCrossingList(bs_crossing_data)
     
     #   Load SPICE kernels for positions of Juno
-    spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
-    spice.furnsh(paths_dict['JunoMetakernel'].as_posix())
+    spice.furnsh(get_paths()['PlanetaryMetakernel'].as_posix())
+    spice.furnsh(get_paths()['JunoMetakernel'].as_posix())
     
     R_J = spice.bodvcd(599, 'RADII', 3)[1][1]
     
@@ -260,35 +268,3 @@ def plot_CrossingsAndTrajectories():
     
     breakpoint()
 
-def analyze_RhoDistributions():
-    import spiceypy as spice
-    
-    crossings_df = make_CombinedCrossingsList(boundary = 'MP')
-    
-    rho, phi, ell = boundaries.convert_CartesianToCylindricalSolar(*mp_crossings.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
-    
-    #   Load SPICE kernels for positions of Juno
-    spice.furnsh(paths_dict['PlanetaryMetakernel'].as_posix())
-    spice.furnsh(paths_dict['JunoMetakernel'].as_posix())
-    
-    R_J = spice.bodvcd(599, 'RADII', 3)[1][1]
-    
-    #   Get all hourly trajectory info
-    earliest_time = min(crossings_df.index)
-    latest_time = max(crossings_df.index)
-     
-    datetimes = np.arange(pd.Timestamp(earliest_time).replace(minute=0, second=0, nanosecond=0),
-                          pd.Timestamp(latest_time).replace(minute=0, second=0, nanosecond=0) + dt.timedelta(hours=1),
-                          dt.timedelta(hours=1)).astype(dt.datetime)
-     
-    ets = spice.datetime2et(datetimes)
-     
-    pos, lt = spice.spkpos('Juno', ets, 'Juno_JSS', 'None', 'Jupiter')
-    pos = pos.T / R_J
-    pos_df = pd.DataFrame({'x': pos[0], 'y': pos[1], 'z':pos[2]}, 
-                           ndex=datetimes)
-     
-    spice.kclear()
-    
-    breakpoint()
-        
