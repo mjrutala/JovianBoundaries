@@ -892,15 +892,16 @@ def perturb_Placeholder(variable, neg_unc, pos_unc):
 
     """
     rng = np.random.default_rng()
-    perturb = rng.normal(0, 0.3, len(variable))
+    perturb = rng.normal(0, 1, len(variable))
     
     perturbed_variable = variable
-    perturbed_variable[perturb < 0] += neg_unc[perturb < 0]
-    perturbed_variable[perturb > 0] += pos_unc[perturb > 0]
+    perturbed_variable[perturb < 0] += perturb[perturb < 0] * neg_unc[perturb < 0]
+    perturbed_variable[perturb > 0] += perturb[perturb > 0] * pos_unc[perturb > 0]
     
     if (perturbed_variable < 0).any():
         #   This should NEVER hapen
-        breakpoint()
+        perturbed_variable[perturbed_variable < 0] = np.nan
+        print('Nonphysical pressure')
     
     return perturbed_variable
 
@@ -933,6 +934,7 @@ def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters
     #   Add the model parameters as variables, 
     #   then take only times with both model and crossing
     variables = pd.concat([crossings, solarwind_model], axis=1, join="inner")
+    variables = variables.dropna(how='any')
     
     #   Fetch the expected variables from the function being fit
     independent_variables, dependent_variables = function(variables=True)
