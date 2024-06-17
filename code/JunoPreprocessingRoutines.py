@@ -20,9 +20,9 @@ def get_paths():
                   'SPICE': Path('/Users/mrutala/SPICE/')}
     paths_dict = paths_dict | {'JunoMetakernel': paths_dict['SPICE']/'juno/metakernel_juno.txt',
                                'PlanetaryMetakernel': paths_dict['SPICE']/'generic/metakernel_planetary.txt', 
-                               'Louis2023_magnetopause': paths_dict['data'] / 'boundary_crossings_caracteristics_MP.csv', 
-                               'Louis2023_bowshock': paths_dict['data'] / 'boundary_crossings_caracteristics_BS.csv',
-                               'Kurth_bowshock': paths_dict['data'] / 'Kurth_BowShocks_formatted.csv'}
+                               'Louis2023_magnetopause': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_MP.csv', 
+                               'Louis2023_bowshock': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_BS.csv',
+                               'Kurth_bowshock': paths_dict['data'] / 'Kurth_Waves/Kurth_BowShocks_formatted.csv'}
     
     return paths_dict
     
