@@ -74,6 +74,7 @@ def compare_MMESHToData():
                               'span':(dt.datetime(2016, 5,16), dt.datetime(2016, 6,25))}
     
     param = 'p_dyn'
+    
     #  Load spacecraft data
     temp_dict = {'datetime':[], param:[]}
     for interval, info in epochs.items():
@@ -241,8 +242,355 @@ def compare_MMESHToData():
            ylabel='Data Density')
 
     ax.legend()
+       
+    # for suffix in ['.png', '.jpg']:
+    #     fig.savefig(str(fullfilename)+traj_name+suffix, 
+    #                 transparent=True,
+    #                 dpi=800)
     plt.show()
     
+    breakpoint()
+    return
+
+def validate_MME():
+    """
+    Largely designed for Lancaster Trip June 2024
+
+    Returns
+    -------
+    None.
+
+    """
+    import scipy
+    import numpy as np
+    from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
+    
+    import sys
+    sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
+    import spacecraftdata
+    
+    epoch_colors = {"Pioneer11" : '#bb4c41',
+                    "Voyager1"  : '#be7a3e',
+                    "Voyager2"  : '#c0a83b',
+                    "Ulysses_01": '#86b666',
+                    "Ulysses_02": '#4bc490',
+                    "Ulysses_03": '#5a9ab3',
+                    "Juno"      : '#686fd5'}
+    epoch_text_names = {"Pioneer11" : 'Pioneer 11',
+                        "Voyager1"  : 'Voyager 1',
+                        "Voyager2"  : 'Voyager 2',
+                        "Ulysses_01": 'Ulysses (1)',
+                        "Ulysses_02": 'Ulysses (2)',
+                        "Ulysses_03": 'Ulysses (3)',
+                        "Juno"      : 'Juno'}
+    
+    epochs = {}
+    # epochs['Pioneer11'] = {'spacecraft_name':'Pioneer 11',
+    #                           'span':(dt.datetime(1977, 6, 3), dt.datetime(1977, 7, 29))}
+    epochs['Voyager1'] = {'spacecraft_name':'Voyager 1',
+                              'span':(dt.datetime(1979, 1, 3), dt.datetime(1979, 5, 5))}
+    epochs['Voyager2'] = {'spacecraft_name':'Voyager 2',
+                              'span':(dt.datetime(1979, 3, 30), dt.datetime(1979, 8, 20))}
+    epochs['Ulysses_01']  = {'spacecraft_name':'Ulysses',
+                              'span':(dt.datetime(1991,12, 8), dt.datetime(1992, 2, 2))}
+    epochs['Ulysses_02']  = {'spacecraft_name':'Ulysses',
+                              'span':(dt.datetime(1997, 8,14), dt.datetime(1998, 4,16))}
+    epochs['Ulysses_03']  = {'spacecraft_name':'Ulysses',
+                              'span':(dt.datetime(2003,10,24), dt.datetime(2004, 6,22))}
+    epochs['Juno']     = {'spacecraft_name':'Juno',
+                              'span':(dt.datetime(2016, 5,16), dt.datetime(2016, 6,25))}
+    
+    param = 'u_mag'
+    
+    #  Load spacecraft data
+    statd = {'datetime':[], 'u_mag':[], 'p_dyn':[], 'B_mag':[], 'epoch':[]}
+    for interval, info in epochs.items():
+        spacecraft = spacecraftdata.SpacecraftData(info['spacecraft_name'])
+        starttime, stoptime = info['span']
+        spacecraft.read_processeddata(starttime, stoptime, resolution='60Min')
+        
+        if len(spacecraft.data) > 0:
+            statd['datetime'].extend(spacecraft.data.index.to_numpy())
+            statd['epoch'].extend([interval] * len(spacecraft.data.index))
+            
+            statd['u_mag'].extend(spacecraft.data.loc[:, 'u_mag'].to_numpy()) 
+            statd['p_dyn'].extend(spacecraft.data.loc[:, 'p_dyn'].to_numpy()) 
+            statd['B_mag'].extend(spacecraft.data.loc[:, 'B_mag'].to_numpy()) 
+            
+    data_df = pd.DataFrame.from_dict(statd)
+    data_df = data_df.set_index('datetime')
+    
+    # Combine the data df with 13-month-mean solar radio flux df
+    srf = read_SolarRadioFlux().rolling('9490h').mean().loc[:, 'adjusted_flux']
+    data_df = data_df.merge(srf, how='left', left_index=True, right_index=True)
+    
+    #   Finally, drop nans
+    data_df = data_df.dropna(how='any')
+    data_df = data_df.sort_index()
+    
+    #   Load the solar wind data and select the ensesmble
+    sw_mme_filepath = '/Users/mrutala/projects/JupiterBoundaries/mmesh_run/MMESH_atJupiter_20160301-20240301_withConstituentModels.csv'
+    sw_models = MMESH_reader.fromFile(sw_mme_filepath)
+    sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
+    
+    # =============================================================================
+    #    Plot solar cycle coverage 
+    # =============================================================================
+    fig, ax = plt.subplots(figsize=(4,3))
+    plt.subplots_adjust(bottom=0.16, left=0.15, right=0.80, top=0.99, 
+                        hspace=0.1)
+    
+    ax.plot(srf, color='black', linewidth=1, zorder=3, label = 'DRAO')
+    for epoch_name in epochs.keys():
+        ax.plot(data_df.query("epoch == @epoch_name")['adjusted_flux'],
+                color = epoch_colors[epoch_name], linewidth = 4, alpha=0.75, zorder = 2)
+                #label = epoch_text_names[epoch_name])
+    
+    ax.plot(sw_mme.index, srf.loc[sw_mme.index], 
+            color = 'C0', linewidth = 3, alpha = 0.75, zorder = 1)
+            #label = 'MME')
+    
+    ax.legend()
+    ax.set(xlabel = 'Year', 
+           ylabel = 'F10.7cm Flux / SFU \n (13-month mean)')
+    
+    for suffix in ['.png',]:
+        pname = '/Users/mrutala/presentations/Lancaster20240613/Figures/'
+        fig.savefig(pname+'MME_Spacecraft_SolarCycleCoverage'+suffix, 
+                    transparent=True,
+                    dpi=800)
+    plt.show()
+
+    
+    # =============================================================================
+    #     
+    # =============================================================================
+    #   Plot speed distributions
+    fig, ax = plt.subplots(figsize=(4,3))
+    plt.subplots_adjust(bottom=0.16, left=0.14, right=0.9925, top=0.99, 
+                        hspace=0.1)
+    
+    speed_bin_edges = np.arange(300, 800+10, 10)
+    n_bins = len(speed_bin_edges) - 1
+    
+    #   Stacked histogram, so keep track of bottoms
+    data_hist_bottoms = [0] * n_bins
+    for epoch_name in epochs.keys():
+        
+        data_hist_tops, _ = np.histogram(data_df.query("epoch == @epoch_name")['u_mag'], 
+                                         speed_bin_edges, density=True)
+        data_hist_tops *= len(data_df.query("epoch == @epoch_name")) / len(data_df)
+        ax.bar(speed_bin_edges[:n_bins], data_hist_tops, 10, 
+               align = 'edge', bottom=data_hist_bottoms,
+               label = epoch_text_names[epoch_name], color = epoch_colors[epoch_name])
+        data_hist_bottoms += data_hist_tops
+        
+    data_hist, _ = np.histogram(data_df['u_mag'], 
+                                     speed_bin_edges, density=True)
+    # combined_mme_p_dyn = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+    #                                      sw_mme['p_dyn'],
+    #                                      sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
+    approx_mme_speed = np.concatenate([sw_mme['u_mag']+sw_mme['u_mag_pos_unc'], 
+                                       sw_mme['u_mag'],
+                                       sw_mme['u_mag']-sw_mme['u_mag_neg_unc']])
+    
+    model_hist, _ = np.histogram(approx_mme_speed, speed_bin_edges, density=True)
+    
+    ax.stairs(model_hist, speed_bin_edges, linewidth=2, label='MME', color='C0', zorder=2)
+    ax.stairs(data_hist, speed_bin_edges, linewidth=2, label='All Data', color='C1', zorder=1)
+    ax.set(xlabel='Solar Wind Speed / (km/s)',
+           ylabel='Density')
+
+    ax.legend()
+    ax.xaxis.set_major_locator(MultipleLocator(100))
+    ax.xaxis.set_minor_locator(MultipleLocator(10))
+    
+    for suffix in ['.png',]:
+        pname = '/Users/mrutala/presentations/Lancaster20240613/Figures/'
+        fig.savefig(pname+'MME_Spacecraft_SpeedDistributions'+suffix, 
+                    transparent=True,
+                    dpi=800)
+    plt.show()
+    
+    # =============================================================================
+    #     
+    # =============================================================================
+    #   Plot B distributions
+    fig, ax = plt.subplots(figsize=(4,3))
+    plt.subplots_adjust(bottom=0.16, left=0.14, right=0.9925, top=0.99, 
+                        hspace=0.1)
+    
+    B_bin_edges = np.arange(0, 5+0.1, 0.1)
+    n_bins = len(B_bin_edges) - 1
+    
+    #   Stacked histogram, so keep track of bottoms
+    data_hist_bottoms = [0] * n_bins
+    for epoch_name in epochs.keys():
+        
+        data_hist_tops, _ = np.histogram(data_df.query("epoch == @epoch_name")['B_mag'], 
+                                         B_bin_edges, density=True)
+        data_hist_tops *= len(data_df.query("epoch == @epoch_name")) / len(data_df)
+        ax.bar(B_bin_edges[:n_bins], data_hist_tops, 0.1, 
+               align = 'edge', bottom=data_hist_bottoms,
+               label = epoch_text_names[epoch_name], color = epoch_colors[epoch_name])
+        data_hist_bottoms += data_hist_tops
+        
+    data_hist, _ = np.histogram(data_df['B_mag'], 
+                                B_bin_edges, density=True)
+    # combined_mme_p_dyn = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+    #                                      sw_mme['p_dyn'],
+    #                                      sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
+    approx_mme_speed = np.concatenate([sw_mme['B_mag']+sw_mme['B_mag_pos_unc'], 
+                                       sw_mme['B_mag'],
+                                       sw_mme['B_mag']-sw_mme['B_mag_neg_unc']])
+    
+    model_hist, _ = np.histogram(approx_mme_speed, B_bin_edges, density=True)
+    
+    ax.stairs(model_hist, B_bin_edges, linewidth=2, label='MME', color='C0', zorder=2)
+    ax.stairs(data_hist, B_bin_edges, linewidth=2, label='All Data', color='C1', zorder=1)
+    ax.set(xlabel='IMF Magnitude / nT',
+           ylabel='Density')
+
+    ax.legend()
+    ax.xaxis.set_major_locator(MultipleLocator(2))
+    ax.xaxis.set_minor_locator(MultipleLocator(0.1))
+    
+    for suffix in ['.png',]:
+        pname = '/Users/mrutala/presentations/Lancaster20240613/Figures/'
+        fig.savefig(pname+'MME_Spacecraft_BDistributions'+suffix, 
+                    transparent=True,
+                    dpi=800)
+    plt.show()
+    
+    # =============================================================================
+    #     
+    # =============================================================================
+    #   Plot pressure distributions
+    fig, ax = plt.subplots(figsize=(4,3))
+    plt.subplots_adjust(bottom=0.16, left=0.14, right=0.9925, top=0.99, 
+                        hspace=0.1)
+    
+    p_dyn_bin_edges = np.arange(-3, 0.5+0.1, 0.1)
+    n_bins = len(p_dyn_bin_edges) - 1
+    
+    #   Stacked histogram, so keep track of bottoms
+    data_hist_bottoms = [0] * n_bins
+    for epoch_name in epochs.keys():
+        
+        data_hist_tops, _ = np.histogram(np.log10(data_df.query("epoch == @epoch_name")['p_dyn']), 
+                                         p_dyn_bin_edges, density=True)
+        data_hist_tops *= len(data_df.query("epoch == @epoch_name")) / len(data_df)
+        ax.bar(p_dyn_bin_edges[:n_bins], data_hist_tops, 0.1, 
+               align = 'edge', bottom=data_hist_bottoms,
+               label = epoch_text_names[epoch_name], color = epoch_colors[epoch_name])
+        data_hist_bottoms += data_hist_tops
+        
+    data_hist, _ = np.histogram(np.log10(data_df['p_dyn']), 
+                                p_dyn_bin_edges, density=True)
+    # combined_mme_p_dyn = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+    #                                      sw_mme['p_dyn'],
+    #                                      sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
+    approx_mme_speed = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+                                       sw_mme['p_dyn'],
+                                       sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
+    
+    model_hist, _ = np.histogram(np.log10(approx_mme_speed), p_dyn_bin_edges, density=True)
+    
+    ax.stairs(model_hist, p_dyn_bin_edges, linewidth=2, label='MME', color='C0', zorder=2)
+    ax.stairs(data_hist, p_dyn_bin_edges, linewidth=2, label='All Data', color='C1', zorder=1)
+    ax.set(xlabel=r'Log$_{10}$ Dynamic Pressure / nPa',
+           ylabel='Density')
+
+    ax.legend()
+    ax.xaxis.set_major_locator(MultipleLocator(1))
+    ax.xaxis.set_minor_locator(MultipleLocator(0.1))
+    
+    for suffix in ['.png',]:
+        pname = '/Users/mrutala/presentations/Lancaster20240613/Figures/'
+        fig.savefig(pname+'MME_Spacecraft_PressureDistributions'+suffix, 
+                    transparent=True,
+                    dpi=800)
+    plt.show()
+    
+# =============================================================================
+#   Loading MME and Crossing Lists
+# =============================================================================
+    import JunoPreprocessingRoutines as PR 
+    import JoyBoundaryCoords as JBC
+    
+    
+    mp_crossing_data = PR.read_Louis2023_CrossingList(mp=True)
+    
+    bs_crossing_data_Louis2023 = PR.read_Louis2023_CrossingList(bs=True)
+    
+    bs_crossing_data_Kurth = PR.read_Kurth_CrossingList(bs=True)
+    bs_crossing_data_Kurth = bs_crossing_data_Kurth[bs_crossing_data_Kurth['direction'].notna()]
+    
+    bs_crossing_data = pd.concat([bs_crossing_data_Louis2023, bs_crossing_data_Kurth], axis=0, join="outer")
+    
+    #   Only pass the datetime index, the direction of the crossing, and any notes
+    hourly_mp_crossing_data = PR.make_HourlyCrossingList(mp_crossing_data)
+    hourly_mp_crossing_data['p_dyn'] = JBC.find_JoyPressures(*hourly_mp_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T, 'MP')
+    
+    hourly_bs_crossing_data = PR.make_HourlyCrossingList(bs_crossing_data)
+    hourly_bs_crossing_data['p_dyn'] = JBC.find_JoyPressures(*hourly_bs_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T, 'BS')
+
+
+    # =============================================================================
+    #     
+    # =============================================================================
+    #   Plot pressure distributions
+    fig, ax = plt.subplots(figsize=(4,3))
+    plt.subplots_adjust(bottom=0.16, left=0.14, right=0.9925, top=0.99, 
+                        hspace=0.1)
+    
+    p_dyn_bin_edges = np.arange(-3, 0.5+0.1, 0.1)
+    n_bins = len(p_dyn_bin_edges) - 1
+    
+    #   Stacked histogram, so keep track of bottoms
+    data_hist_bottoms = [0] * n_bins
+    for epoch_name in epochs.keys():
+        
+        data_hist_tops, _ = np.histogram(np.log10(data_df.query("epoch == @epoch_name")['p_dyn']), 
+                                         p_dyn_bin_edges, density=True)
+        data_hist_tops *= len(data_df.query("epoch == @epoch_name")) / len(data_df)
+        ax.bar(p_dyn_bin_edges[:n_bins], data_hist_tops, 0.1, 
+               align = 'edge', bottom=data_hist_bottoms,
+               label = epoch_text_names[epoch_name], color = epoch_colors[epoch_name])
+        data_hist_bottoms += data_hist_tops
+        
+    data_hist, _ = np.histogram(np.log10(data_df['p_dyn']), 
+                                p_dyn_bin_edges, density=True)
+    # combined_mme_p_dyn = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+    #                                      sw_mme['p_dyn'],
+    #                                      sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
+    approx_mme_speed = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+                                       sw_mme['p_dyn'],
+                                       sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
+    
+    model_hist, _ = np.histogram(np.log10(approx_mme_speed), p_dyn_bin_edges, density=True)
+    
+    combined_inferred_p_dyn = np.concatenate([hourly_bs_crossing_data['p_dyn'].to_numpy(), 
+                                        hourly_mp_crossing_data['p_dyn'].to_numpy()])
+    inferred_hist, bins = np.histogram(np.log10(combined_inferred_p_dyn), p_dyn_bin_edges, density=True)
+    
+    ax.stairs(model_hist, p_dyn_bin_edges, linewidth=2, label='MME', color='C0', zorder=2)
+    ax.stairs(data_hist, p_dyn_bin_edges, linewidth=2, label='All Data', color='C1', zorder=1)
+    ax.stairs(inferred_hist, p_dyn_bin_edges, linewidth=2, label='Inferred', color='xkcd:lavender')
+    ax.set(xlabel=r'Log$_{10}$ Dynamic Pressure / nPa',
+           ylabel='Density')
+
+    ax.legend()
+    ax.xaxis.set_major_locator(MultipleLocator(1))
+    ax.xaxis.set_minor_locator(MultipleLocator(0.1))
+    
+    for suffix in ['.png',]:
+        pname = '/Users/mrutala/presentations/Lancaster20240613/Figures/'
+        fig.savefig(pname+'MME_Spacecraft_Inferred_PressureDistributions'+suffix, 
+                    transparent=True,
+                    dpi=800)
+    plt.show()
+        
     breakpoint()
     return
 
@@ -459,15 +807,15 @@ def analyze_RhoDistributions():
         def histogram_rho(ax, df, **kwargs):
             histo, _ = np.histogram(df['rho'], 
                                     bins=rho_bin_edges,
-                                    density=True)
+                                    density=False)
             ax.stairs(histo, rho_bin_edges, 
                       linewidth=2, **kwargs)
             
         histogram_rho(axd['dawn_rho'], crossings_df.query(crossings_dawn_query), color='C1')
-        histogram_rho(axd['dawn_rho'], Juno_df.query(crossings_dawn_query), color='C2')
+        #histogram_rho(axd['dawn_rho'], Juno_df.query(crossings_dawn_query), color='C2')
         
         histogram_rho(axd['dusk_rho'], crossings_df.query(crossings_dusk_query), color='C1')
-        histogram_rho(axd['dusk_rho'], Juno_df.query(crossings_dusk_query), color='C2')
+        #histogram_rho(axd['dusk_rho'], Juno_df.query(crossings_dusk_query), color='C2')
         
         def histogram_p_dyn(ax, df):
             histo, _ = np.histogram(df['p_dyn_mmesh'],
