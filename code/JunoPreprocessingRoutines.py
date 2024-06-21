@@ -13,7 +13,7 @@ import sys
 sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
 import MMESH_reader
 
-import boundaries
+import BoundaryModels as BM
 
 def get_paths():
     paths_dict = {'data': Path('/Users/mrutala/projects/JupiterBoundaries/data/'),
