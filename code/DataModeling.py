@@ -18,6 +18,8 @@ import pymc as pm
 import arviz as az
 from sklearn.neighbors import KernelDensity
 
+import DataModeling_RegressionRoutines as RR
+
 import BoundaryModels as BM
 import JunoPreprocessingRoutines as JPR
 
@@ -50,8 +52,9 @@ def analyze_RhoDistributions():
     earliest_time = min(crossings_df.index)
     latest_time = max(crossings_df.index)
      
+    #   arange has an open right bound, so add two hours to fully encompass the crossings
     datetimes = np.arange(pd.Timestamp(earliest_time).replace(minute=0, second=0, nanosecond=0),
-                          pd.Timestamp(latest_time).replace(minute=0, second=0, nanosecond=0) + datetime.timedelta(hours=1),
+                          pd.Timestamp(latest_time).replace(minute=0, second=0, nanosecond=0) + datetime.timedelta(hours=2), 
                           datetime.timedelta(hours=1)).astype(datetime.datetime)
      
     ets = spice.datetime2et(datetimes)   
@@ -82,38 +85,179 @@ def analyze_RhoDistributions():
     plt.show()
     
     #   Boundaries in the elevation (z cylindrical axis, + toward Sun)
-    ell_left, ell_right, ell_step = -120, 40, 20
-    n_ell_bins = (ell_right - ell_left)/ell_step
-    
+    ell_left, ell_right, ell_step = -120, 40, 10 # 20
     ell_bounds = np.array([np.arange(ell_left, ell_right, ell_step),
                            np.arange(ell_left, ell_right, ell_step) + ell_step]).T
     
+    phi_left, phi_right, phi_step = -np.pi, np.pi, np.pi
+    phi_bounds = np.array([np.arange(phi_left, phi_right, phi_step),
+                           np.arange(phi_left, phi_right, phi_step) + phi_step]).T
     
-    results = [{}] * int(n_ell_bins)
-    for step, ell_bound in enumerate(ell_bounds):
-        
-        #   Set the bounds
-        results[step]['ell_bound'] = ell_bound
-        
-        #   Add Juno ephemerides
-        results[step]['Juno_eph'] = Juno_df.query("{0} < ell < {1}".format(*ell_bound))
-        
-        #   Perform a deeper search for maximum rho in Juno ephemerides
-        
-        breakpoint()
-        
-        
-    ell_refs = np.arange(ell_left, ell_right, ell_step) + 0.5*ell_step
+    #   Query for subsampling the crossings list
+    query_fmt = "({0} <= ell < {1}) & ({2} <= phi < {3})"
+    
+    results_grid = []
+    for ell_bound in ell_bounds:
+        results_grid.append([])
+        for phi_bound in phi_bounds:
+            temp_dict = {}
+            
+            #   Set the bounds
+            temp_dict['ell_bound'] = ell_bound
+            temp_dict['ell_ref'] = np.mean(ell_bound)
+            
+            temp_dict['phi_bound'] = phi_bound
+            temp_dict['phi_ref'] = np.mean(phi_bound)
+            
+            #   Subsample the combined crossings dataset
+            query = query_fmt.format(*[*ell_bound, *phi_bound])
+            temp_dict['crossings'] = crossings_df.query(query)
+            temp_dict['number'] = len(temp_dict['crossings'].index)
+            
+            #   Add Juno ephemerides
+            temp_dict['Juno_eph'] = Juno_df.query(query)
+            temp_dict['time_in_bin'] = len(temp_dict['Juno_eph'])
+            
+            # #   Check that the Juno ephemerides fully cover the crossings
+            # if (temp_dict['time_in_bin'] > 0) & (temp_dict['number'] > 0):
+            #     check = ((temp_dict['Juno_eph'].index[ 0] < temp_dict['crossings'].index[ 0]) &
+            #              (temp_dict['Juno_eph'].index[-1] > temp_dict['crossings'].index[-1]))
+            #     if check == False:
+                    
+            #         indx = [(Juno_df.index > (temp_dict['crossings'].index[ 0] - datetime.timedelta(hours=1))) &
+            #                 (Juno_df.index < (temp_dict['crossings'].index[-1] + datetime.timedelta(hours=1)))]
+            #         breakpoint()
+            #         temp_dict['Juno_eph'] = Juno_df.iloc[indx, :]
+            #         temp_dict['time_in_bin'] = len(temp_dict['Juno_eph'])
+            
+            print(temp_dict['time_in_bin'], temp_dict['number'])
+            
+            # #   Perform a deeper search for maximum rho in Juno ephemerides
+            # #   Ideally, we'd do a higher resolution search for maxima
+            # #   But my computer has some issues dealing with this
+            # earliest_time = np.min(results[-1]['Juno_eph'].index).to_pydatetime()
+            # latest_time = np.max(results[-1]['Juno_eph'].index).to_pydatetime()
+            
+            # seconds_ets = spice.datetime2et(np.arange(earliest_time, latest_time, 
+            #                                           datetime.timedelta(minutes=1), 
+            #                                           dtype=datetime.datetime))
+            
+            # pos, lt = spice.spkpos('Juno', seconds_ets, 'Juno_JSS', 'None', 'Jupiter')
+            # xyz_Juno = pos.T / R_J
+            # hires_rho, _, _ = BM.convert_CartesianToCylindricalSolar(*xyz_Juno)
+            # results[-1]['rho_bound'] = [np.min(hires_rho), np.max(hires_rho)]
+            
+            #   Instead, check that the maximum crossing rho is smaller than the bounds
+            max_rho_Juno = np.max(temp_dict['Juno_eph']['rho'])
+            max_rho_in_crossings = np.max(temp_dict['crossings']['rho'])
+            
+            #   We need to avoid this if we want to used bounds
+            if max_rho_Juno < max_rho_in_crossings:
+                breakpoint()
+            
+            #   Record the physcial bounds of Juno's orbit
+            temp_dict['physical_rho_bound'] = [np.min(temp_dict['Juno_eph']['rho']), 
+                                               np.max(temp_dict['Juno_eph']['rho'])]
 
-    
-    breakpoint()
-    results_dict = {}
-    
-    
+            
+            #   Fitting
+            fit = {}
+            fit['rho_abcissa'] = np.linspace(50, 200, 100)
+            fit['ell_abcissa'] = np.zeros(100) + temp_dict['ell_ref']
+            if temp_dict['number'] > 0:
+                
+                # TruncNormFit = RR.TruncatedNormal_Fit(temp_dict['crossings']['ell'].to_numpy(), 
+                #                                       temp_dict['crossings']['rho'].to_numpy(), 
+                #                                       temp_dict['physical_rho_bound'])
+                TruncNormFit = RR.TruncatedNormal_Informed_Fit(temp_dict['crossings']['ell'].to_numpy(), 
+                                                               temp_dict['crossings']['rho'].to_numpy(), 
+                                                               temp_dict['physical_rho_bound'])
+                
+                TruncNormFit_df = TruncNormFit.to_dataframe(groups='posterior')
+                
+                kde = KernelDensity(kernel='gaussian', bandwidth=1).fit(TruncNormFit_df['intercept'].to_numpy().reshape(-1, 1))
+                log_kde_pdf = kde.score_samples(fit['rho_abcissa'].reshape(-1,1))
+                kde_pdf = np.exp(log_kde_pdf)
+                
+                fit['intercept_density'] = kde_pdf
+                
+            else:
+                fit['intercept_density'] = np.zeros(100)
+            
+            viz = True
+            if viz:
+                fig, axs = plt.subplots(figsize=(6,4), ncols=2)
+                
+                hist_ax = axs[0].twinx()
+                hist_ax.hist(temp_dict['crossings']['rho'], 
+                             bins = np.arange(50, 200, 10),
+                             color = 'C1',
+                             label = 'Crossings', density=True)
+                axs[0].plot(fit['rho_abcissa'], fit['intercept_density'], 
+                            color = 'C4', label = r'Fit $\mu$')
+                axs[0].axvline(temp_dict['physical_rho_bound'][0], 
+                               color = 'C0', linestyle = '--',
+                               label = r'Min. Apojove $\rho$')
+                axs[0].axvline(temp_dict['physical_rho_bound'][1], 
+                               color = 'C0', linestyle = '--',
+                               label = r'Max. Apojove $\rho$')
+                axs[0].legend()
+                
+                # axs[1].plot(fit['rho_abcissa'], fit['intercept_density'], 
+                #             color = 'C4', label = r'Fit $\mu$')
+                # axs[1].axvline(temp_dict['physical_rho_bound'][0], 
+                #                color = 'C0', linestyle = '--',
+                #                label = r'Min. Apojove $\rho$')
+                # axs[1].axvline(temp_dict['physical_rho_bound'][1], 
+                #                color = 'C0', linestyle = '--',
+                #                label = r'Max. Apojove $\rho$')
+                # axs[1].legend()
+                
+                fig.suptitle(r'l: {0}-{1} $R_J$, $\phi$: {2:.2f}-{3:.2f} rad'.format(*temp_dict['ell_bound'], *temp_dict['phi_bound']))
+                plt.show()
+            
+            temp_dict['fit'] = pd.DataFrame(fit)
+            
+            #   Add everything to the lists
+            results_grid[-1].append(temp_dict)
+            del temp_dict
+
     spice.kclear()
     
-    d = {}
-    for ell_ref, ell_bound in zip(ell_refs, ell_bounds):
+    #   Plotting
+    n_ell, n_phi = np.shape(results_grid)
+    
+    fig, axs = plt.subplots(nrows = n_phi)
+    for res in results_grid:
+        
+        axs[0].scatter(res[0]['fit']['ell_abcissa'], 
+                       res[0]['fit']['rho_abcissa'],
+                       c = res[0]['fit']['intercept_density'],
+                       vmin = 0.005, vmax = 0.03,
+                       marker = '_', s=100)
+        
+        axs[0].scatter(res[0]['crossings']['ell'],
+                       res[0]['crossings']['rho'],
+                       c = 'xkcd:blue', marker='x', s=10)
+        
+        axs[1].scatter(res[1]['fit']['ell_abcissa'], 
+                       res[1]['fit']['rho_abcissa'],
+                       c = res[1]['fit']['intercept_density'],
+                       vmin = 0.005, vmax = 0.03,
+                       marker = '_', s=100)
+        
+        axs[1].scatter(res[1]['crossings']['ell'],
+                       res[1]['crossings']['rho'],
+                       c = 'xkcd:gold', marker='x', s=10)
+        
+        
+        
+    plt.show()
+    
+    breakpoint()
+    
+    
+    for dcty in results_grid:
         
         #   Binary truth indices for bounds, dawn/dusk
         #   In this coordinate system, dawn is 0-pi and dusk is pi-2pi
