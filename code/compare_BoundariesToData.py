@@ -23,7 +23,7 @@ import JoyBoundaryCoords as JBC
 sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
 import MMESH_reader
 
-import boundaries
+import BoundaryModels as BM
 import JunoPreprocessingRoutines as JPR 
 
 plt.style.use('/Users/mrutala/code/python/mjr.mplstyle')
@@ -759,28 +759,28 @@ def runner(parameter_distributions=False):
     sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
     
     #   Select boundary model
-    boundary_models = {'Shuelike': {'model': boundaries.Shuelike, 
+    boundary_models = {'Shuelike': {'model': BM.Shuelike, 
                                     'params': ['r0', 'r1', 'a0', 'a1'], 
                                     'guess': [60, -0.155, 0.5, -0.1],
                                     'bounds': ([0, -0.16, 0.2, -1.0],
                                                [200, -0.15, 0.8, 1.0])
                                     },
-                       'Shuelike_UniformPressureExponent': {'model': boundaries.Shuelike_UniformPressureExponent, 
+                       'Shuelike_UniformPressureExponent': {'model': BM.Shuelike_UniformPressureExponent, 
                                                        'params': ['r0', 'r1', 'a0', 'a1'], 
                                                        'guess': [60, -0.15, 0.5, 1.0]},
-                       'Shuelike_NonuniformPressureExponent': {'model': boundaries.Shuelike_NonuniformPressureExponent, 
+                       'Shuelike_NonuniformPressureExponent': {'model': BM.Shuelike_NonuniformPressureExponent, 
                                                        'params': ['r0', 'r1', 'a0', 'a1', 'a2'], 
                                                        'guess': [60, -0.15, 0.5, 1.0, 1.0]},
-                       'Shuelike_AsymmetryCase1': {'model': boundaries.Shuelike_AsymmetryCase1, 
+                       'Shuelike_AsymmetryCase1': {'model': BM.Shuelike_AsymmetryCase1, 
                                                        'params': ['r0', 'r1', 'r2', 'r3', 'r4', 'a0', 'a1'], 
                                                        'guess': [50, -0.15, 5, 5, 0, 0.5, 0.0],
                                                        'bounds': ([30, -0.3, 0, 0, -3.14, 0.3, -1.0],
                                                                   [80, -0.1, 10, 10, 3.14, 0.8, 1.0])
                                                        },
-                       'Shuelike_Asymmetric': {'model': boundaries.Shuelike_Asymmetric, 
+                       'Shuelike_Asymmetric': {'model': BM.Shuelike_Asymmetric, 
                                                        'params': ['r0', 'r1', 'r2', 'a0', 'a1', 'a2'], 
                                                        'guess': [60, -0.15, 1, 0.5, 1.0, 1.0]},
-                       'Joylike': {'model': boundaries.Joylike, 
+                       'Joylike': {'model': BM.Joylike, 
                                    'params': ['A0', 'A1', 'B0', 'B1', 'C0', 'C1', 'D0', 'D1', 'E0', 'E1', 'F0', 'F1'], 
                                    'guess': [-0.134, 0.488, -0.581, -0.225, -0.186, -0.016, -0.014, 0.096, -0.814,  -0.811, -0.050, 0.168]}
                        }
@@ -800,7 +800,7 @@ def runner(parameter_distributions=False):
         p_y = perturb_Gaussian(*hourly_crossing_data.loc[:, ['y_JSS', 'y_unc_JSS']].to_numpy().T)
         p_z = perturb_Gaussian(*hourly_crossing_data.loc[:, ['z_JSS', 'z_unc_JSS']].to_numpy().T)
         
-        r, t, p = boundaries.convert_CartesianToSphericalSolar(p_x, p_y, p_z)
+        r, t, p = BM.convert_CartesianToSphericalSolar(p_x, p_y, p_z)
         
         perturbed_hcd = hourly_crossing_data.loc[:, ['direction', 'notes']]
         perturbed_hcd = perturbed_hcd.assign(**{'x': p_x, 'y': p_y, 'z': p_z, 'abs_z': np.abs(p_z), 
@@ -815,9 +815,9 @@ def runner(parameter_distributions=False):
         # breakpoint()
         # perturbed_hcd = perturbed_hcd.iloc[bootstrap_indx, :]
         
-        res = fit_Boundary_withLS(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'], boundary_model['bounds'])
+        #res = fit_Boundary_withLS(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'], boundary_model['bounds'])
         
-        # res = fit_Boundary_withODR(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'])
+        res = fit_Boundary_withODR(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'])
         
         stats['parameters'].append(res['parameters'])
         
@@ -869,7 +869,7 @@ def runner(parameter_distributions=False):
     # z = np.zeros(1000)
     # p_dyn = np.zeros(1000) + 0.05
     
-    # r, t, p = boundaries.convert_CartesianToSphericalSolar(x, y, z)
+    # r, t, p = BM.convert_CartesianToSphericalSolar(x, y, z)
     
 # =============================================================================
 #     Write some functions which return the sets of coordinates needed to make
@@ -923,7 +923,7 @@ def runner(parameter_distributions=False):
             p_dyn = np.zeros(nsamples) + case_info['p_dyn']
             t, p = rtp_coords_dict[ax_name]
             r = boundary_model['model'](median_parameters, [t, p, p_dyn])
-            x, y, z = boundaries.convert_SphericalSolarToCartesian(r, t, p)
+            x, y, z = BM.convert_SphericalSolarToCartesian(r, t, p)
             xyz_coords_dict = {'x':x, 'y':y, 'z':z}
             
             axd[ax_name].plot(xyz_coords_dict[ax_name[0]], 
@@ -937,7 +937,7 @@ def runner(parameter_distributions=False):
     
     #   Get residuals
     xyz_data = hourly_crossing_data[['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T
-    rtp_data = boundaries.convert_CartesianToSphericalSolar(*xyz_data)
+    rtp_data = BM.convert_CartesianToSphericalSolar(*xyz_data)
     p_dyn_data = sw_mme.loc[hourly_crossing_data.index]['p_dyn'].to_numpy()
     
     r_estimate = boundary_model['model'](median_parameters, 
@@ -1001,7 +1001,7 @@ def runner(parameter_distributions=False):
     t_grid, p_grid = np.meshgrid(t, p)
     p_dyn_grid = np.zeros((1000,1000)) + test_pressure_cases['2']['p_dyn']
     r_grid = boundary_model['model'](median_parameters, [t_grid, p_grid, p_dyn_grid])
-    x_grid, y_grid, z_grid = boundaries.convert_SphericalSolarToCartesian(r_grid, t_grid, p_grid)
+    x_grid, y_grid, z_grid = BM.convert_SphericalSolarToCartesian(r_grid, t_grid, p_grid)
     
     axd['3d'].view_init(elev=30, azim=225, roll=0)
     axd['3d'].set(xlabel = r'$x_{JSS}/R_J$ (+ sunward)', xlim = (100, -150), 
@@ -1103,13 +1103,14 @@ def perturb_Placeholder(variable, neg_unc, pos_unc):
     rng = np.random.default_rng()
     perturb = rng.normal(0, 1, len(variable))
     
-    perturbed_variable = variable
+    perturbed_variable = variable.copy()
     perturbed_variable[perturb < 0] += perturb[perturb < 0] * neg_unc[perturb < 0]
     perturbed_variable[perturb > 0] += perturb[perturb > 0] * pos_unc[perturb > 0]
     
     if (perturbed_variable < 0).any():
         #   This should NEVER hapen
         perturbed_variable[perturbed_variable < 0] = np.nan
+        breakpoint()
         print('Nonphysical pressure')
     
     return perturbed_variable
@@ -1176,6 +1177,8 @@ def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters
               'mae': mae}
 
     return result
+
+def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameters, weights=False):
     
     #   Add the model parameters as variables, 
     #   then take only times with both model and crossing
@@ -1190,36 +1193,13 @@ def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters
     #   Begin the ODR
     model = odr.Model(function)
     
-    data = odr.Data(independents, dependents) #, indies_sigma, dies_sigma)
-    
-    odr_fit = odr.ODR(data, model, beta0 = initial_parameters, maxit=100)
-    
-    odr_result = odr_fit.run()
-    
-    #
-    parameters = odr_result.beta, odr_result.sd_beta
-    
-    return parameters
-
-
-
-
-def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameters):
-    
-    #   Add the model parameters as variables, 
-    #   then take only times with both model and crossing
-    variables = pd.concat([crossings, solarwind_model], axis=1, join="inner")
-    
-    #   Fetch the expected variables from the function being fit
-    independent_variables, dependent_variables = function(variables=True)
-    
-    independents = variables.loc[:, independent_variables].to_numpy().T
-    dependents = variables.loc[:, dependent_variables].to_numpy().T
-    
-    #   Begin the ODR
-    model = odr.Model(function)
-    
-    data = odr.Data(independents, dependents) #, indies_sigma, dies_sigma)
+    # data = odr.RealData(independents, dependentd, 
+    #                   sx = indies_sigma,
+    #                    sy = dies_sigma)
+    if weights:
+        data = odr.Data(independents, dependents, wd = 0, we = 0)
+    else:
+        data = odr.Data(independents, dependents)
     
     odr_fit = odr.ODR(data, model, 
                       beta0 = initial_parameters,
@@ -1236,7 +1216,7 @@ def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameter
               'parameters_stddev': odr_result.sd_beta,
               'rmsd': rmsd,
               'mae': mae}
-   
+    breakpoint()
     return result
 
 
