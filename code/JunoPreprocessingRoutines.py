@@ -22,7 +22,9 @@ def get_paths():
                                'PlanetaryMetakernel': paths_dict['SPICE']/'generic/metakernel_planetary.txt', 
                                'Louis2023_magnetopause': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_MP.csv', 
                                'Louis2023_bowshock': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_BS.csv',
-                               'Kurth_bowshock': paths_dict['data'] / 'Kurth_Waves/Kurth_BowShocks_formatted.csv'}
+                               'Kurth_bowshock': paths_dict['data'] / 'Kurth_Waves/Kurth_BowShocks_formatted.csv',
+                               'Ebert_magnetopause': paths_dict['data'] / 'Ebert_JADE/Magnetopause_Crossings_Ebert2024_v5.csv',
+                               'Ebert_bowshock': paths_dict['data'] / 'Ebert_JADE/Bowshock_Crossings_Ebert2024.csv'}
     
     return paths_dict
     
@@ -37,11 +39,15 @@ def make_CombinedCrossingsList(boundary = 'BS'):
             #   Dropping items which didn't have a clearly listed crossing direction
             crossing_data_Kurth = crossing_data_Kurth[crossing_data_Kurth['direction'].notna()]
             
-            crossings_df = pd.concat([crossing_data_Louis2023, crossing_data_Kurth], axis=0, join="outer")
+            crossing_data_Ebert = read_Ebert_CrossingList(bs=True)
+            
+            crossings_df = pd.concat([crossing_data_Louis2023, crossing_data_Kurth, crossing_data_Ebert], axis=0, join="outer")
         case ('mp' | 'magnetopause'):
             crossing_data_Louis2023 = read_Louis2023_CrossingList(mp=True)
             
-            crossings_df = crossing_data_Louis2023
+            crossing_data_Ebert = read_Ebert_CrossingList(mp=True)
+            
+            crossings_df = pd.concat([crossing_data_Louis2023, crossing_data_Ebert], axis=0, join="outer")
         case _:
             crossings_df = None
     
@@ -157,6 +163,32 @@ def read_Kurth_CrossingList(bs=True):
     crossings.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for index, row in crossings.iterrows()]
     crossings = crossings.sort_index()
     crossings['origin'] = 'Kurth, p.c.'
+    return crossings
+
+def read_Ebert_CrossingList(mp=False, bs=True):
+    if mp == True:
+        crossing_list = get_paths()['Ebert_magnetopause']
+        crossing_list_names = ['#', 'date', 'time', 
+                               'r', 'x_JSO', 'y_JSO', 'z_JSO', 
+                               'lat', 'mlat', 'lon', 'LT', 
+                               'notes']
+    else:
+        crossing_list = get_paths()['Ebert_bowshock']
+        crossing_list_names = ['#', 'date', 'time',
+                               'r', 'lat', 'mlat', 'MLT']
+    #   Read the correct list, and drop rows without events
+    crossings = pd.read_csv(crossing_list, 
+                            sep=',', names = crossing_list_names, header=0,
+                            skipinitialspace=True)
+    crossings = crossings.dropna(axis = 'index', how = 'all', subset = ['date', 'time'])
+    
+    #   Set the index to the datetime, rather than an int
+    crossings.index = [dt.datetime.strptime(row['date']+'T'+row['time'], '%Y-%jT%H:%M') for _, row in crossings.iterrows()]
+    crossings = crossings.sort_index()
+    
+    #   Add the origin of these crossings to the df
+    crossings['origin'] = 'Ebert (+ Montgomery), p.c.'
+    
     return crossings
 
 def plot_CrossingsAndTrajectories():
