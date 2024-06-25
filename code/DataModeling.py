@@ -26,10 +26,15 @@ import JunoPreprocessingRoutines as JPR
 sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
 import MMESH_reader
 
-def analyze_RhoDistributions():
+def analyze_RhoDistributions(bs = True):
 
-    
-    crossings_df = JPR.make_CombinedCrossingsList(boundary = 'MP')
+    if bs == True:
+        crossings_df = JPR.make_CombinedCrossingsList(boundary = 'BS')
+        filename = 'BowShock_Density'
+    else:
+        crossings_df = JPR.make_CombinedCrossingsList(boundary = 'MP')
+        filename = 'Magnetopause_Density'
+        
     crossings_df = crossings_df.drop(['p_dyn', 'r_mp', 'r_bs'], axis='columns')
     
     rpl_crossings = BM.convert_CartesianToCylindricalSolar(*crossings_df.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
@@ -152,12 +157,17 @@ def analyze_RhoDistributions():
             max_rho_in_crossings = np.max(temp_dict['crossings']['rho'])
             
             #   We need to avoid this if we want to used bounds
+            #   But, if the error is small (tens of km, near the SPICE resolution)
+            #   we can ignore it
             if max_rho_Juno < max_rho_in_crossings:
-                breakpoint()
+                if (max_rho_in_crossings - max_rho_Juno)*R_J < 50:
+                    max_rho_Juno = max_rho_in_crossings
+                else:
+                    breakpoint()
             
             #   Record the physcial bounds of Juno's orbit
             temp_dict['physical_rho_bound'] = [np.min(temp_dict['Juno_eph']['rho']), 
-                                               np.max(temp_dict['Juno_eph']['rho'])]
+                                               max_rho_Juno]
 
             
             #   Fitting
@@ -198,9 +208,9 @@ def analyze_RhoDistributions():
                 axs[0].axvline(temp_dict['physical_rho_bound'][0], 
                                color = 'C0', linestyle = '--',
                                label = r'Min. Apojove $\rho$')
-                axs[0].axvline(temp_dict['physical_rho_bound'][1], 
-                               color = 'C0', linestyle = '--',
-                               label = r'Max. Apojove $\rho$')
+                # axs[0].axvline(temp_dict['physical_rho_bound'][1], 
+                #                color = 'C0', linestyle = '--',
+                #                label = r'Max. Apojove $\rho$')
                 axs[0].legend()
                 
                 # axs[1].plot(fit['rho_abcissa'], fit['intercept_density'], 
@@ -253,6 +263,31 @@ def analyze_RhoDistributions():
         
         
     plt.show()
+    
+    #   We want to export a numpy array of probabilities in rho-phi-ell space
+    #   Along with meshgrids of each axis reference (center) value
+    probability_map = np.zeros([100, len(phi_bounds), len(ell_bounds)])
+    rho_map = np.zeros([100, len(phi_bounds), len(ell_bounds)])
+    phi_map = np.zeros([100, len(phi_bounds), len(ell_bounds)])
+    ell_map = np.zeros([100, len(phi_bounds), len(ell_bounds)])
+    for i3 in range(np.shape(results_grid)[0]):
+        for i2 in range(np.shape(results_grid)[1]):
+            
+            probability_map[:, i2, i3] = results_grid[i3][i2]['fit']['intercept_density']
+            
+            rho_map[:, i2, i3] = results_grid[i3][i2]['fit']['rho_abcissa']
+            phi_map[:, i2, i3] = np.zeros(100) + results_grid[i3][i2]['phi_ref']
+            ell_map[:, i2, i3] = np.zeros(100) + results_grid[i3][i2]['ell_ref']
+    
+    #   Flatten and write to DataFrame
+    probability_map_df = pd.DataFrame({'density': probability_map.flatten(),
+                                       'rho': rho_map.flatten(),
+                                       'phi': phi_map.flatten(),
+                                       'ell': ell_map.flatten()})
+    
+    probability_map_df.to_csv('/Users/mrutala/projects/JupiterBoundaries/' + filename + '.csv')
+    
+    return probability_map_df
     
     breakpoint()
     
