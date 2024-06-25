@@ -733,23 +733,19 @@ def compare_Pressures():
 
         
 
-def runner(parameter_distributions=False):
-    
-    which_boundary = 'MP'
+def runner(boundary = 'MP', parameter_distributions=False):
+
     sw_mme_filepath = '/Users/mrutala/projects/JupiterBoundaries/mmesh_run/MMESH_atJupiter_20160301-20240301_withConstituentModels.csv'
     
     import JunoPreprocessingRoutines as PR 
     
     #   
-    if which_boundary == 'MP':
-        crossing_data = PR.read_Louis2023_CrossingList(mp=True)
-    if which_boundary == 'BS':
-        bs_crossing_data_Louis2023 = PR.read_Louis2023_CrossingList(bs=True)
-        
-        bs_crossing_data_Kurth = PR.read_Kurth_CrossingList(bs=True)
-        bs_crossing_data_Kurth = bs_crossing_data_Kurth[bs_crossing_data_Kurth['direction'].notna()]
-        
-        crossing_data = pd.concat([bs_crossing_data_Louis2023, bs_crossing_data_Kurth], axis=0, join="outer")
+    if boundary == 'MP':
+        crossing_data = JPR.make_CombinedCrossingsList(boundary = 'MP')
+        weights_filename = 'Magnetopause_Density.csv'
+    if boundary == 'BS':
+        crossing_data = JPR.make_CombinedCrossingLists(boundare = 'BS')
+        weights_filename = 'BowShock_Density.csv'
     
     #   Only pass the datetime index, the direction of the crossing, and any notes
     hourly_crossing_data = PR.make_HourlyCrossingList(crossing_data)
@@ -762,8 +758,8 @@ def runner(parameter_distributions=False):
     boundary_models = {'Shuelike': {'model': BM.Shuelike, 
                                     'params': ['r0', 'r1', 'a0', 'a1'], 
                                     'guess': [60, -0.155, 0.5, -0.1],
-                                    'bounds': ([0, -0.16, 0.2, -1.0],
-                                               [200, -0.15, 0.8, 1.0])
+                                    'bounds': ([0, -0.5, 0.2, -1.0],
+                                               [200, -0.0, 0.8, 1.0])
                                     },
                        'Shuelike_UniformPressureExponent': {'model': BM.Shuelike_UniformPressureExponent, 
                                                        'params': ['r0', 'r1', 'a0', 'a1'], 
@@ -785,7 +781,23 @@ def runner(parameter_distributions=False):
                                    'guess': [-0.134, 0.488, -0.581, -0.225, -0.186, -0.016, -0.014, 0.096, -0.814,  -0.811, -0.050, 0.168]}
                        }
     #boundary_model = boundary_models['Shuelike']
-    boundary_model = boundary_models['Shuelike_AsymmetryCase1']
+    boundary_model = boundary_models['Shuelike']
+
+    #   Read in a map which gives weights for any crossings
+    density_df = pd.read_csv('/Users/mrutala/projects/JupiterBoundaries/' + weights_filename)
+    
+    rho, phi, ell = BM.convert_CartesianToCylindricalSolar(*hourly_crossing_data.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
+    hourly_crossing_data = hourly_crossing_data.assign(**{'rho': rho, 'phi': phi, 'ell': ell})
+        
+    #   The density DataFrame describes probability densities for binned rho, phi, ell
+    #   So if you find the closest value of rho, phi, ell, you get the weight
+    hourly_crossing_data['weights'] = -1
+    for ind, row in hourly_crossing_data.iterrows():
+        minimize = (np.abs(density_df['rho'] - row['rho']) 
+                    + np.abs(density_df['phi'] - row['phi']) 
+                    + np.abs(density_df['ell'] - row['ell']))
+        
+        hourly_crossing_data.loc[ind, 'weights'] = density_df.iloc[np.argmin(minimize)]['density']
     
     # Here: add a loop for MC and a function which perturbs the variables
     n_mc = 1000
@@ -815,9 +827,15 @@ def runner(parameter_distributions=False):
         # breakpoint()
         # perturbed_hcd = perturbed_hcd.iloc[bootstrap_indx, :]
         
-        #res = fit_Boundary_withLS(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'], boundary_model['bounds'])
+        #weights = np.zeros(len (perturbed_hcd)) + 1.0
         
-        res = fit_Boundary_withODR(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'])
+        res = fit_Boundary_withLS(perturbed_hcd, perturbed_sw_mme, 
+                                  boundary_model['model'], 
+                                  boundary_model['guess'], 
+                                  boundary_model['bounds'],
+                                  weights = hourly_crossing_data['weights'].to_numpy())
+        
+        #res = fit_Boundary_withODR(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'])
         
         stats['parameters'].append(res['parameters'])
         
@@ -828,7 +846,7 @@ def runner(parameter_distributions=False):
         #   Use these perturbed values to compare to Joy+ 2002
         #   This bit might be removed if I ever get Joy+ working well
         joy_z = JBC.find_JoyBoundaries(perturbed_sw_mme.loc[hourly_crossing_data.index, 'p_dyn'].to_numpy(), 
-                                       boundary=which_boundary, x=p_x, y=p_y)
+                                       boundary=boundary, x=p_x, y=p_y)
         abs_z = np.abs(p_z)
         
         valid_joy_indx = ~np.isnan(joy_z[0])
@@ -1101,7 +1119,8 @@ def perturb_Placeholder(variable, neg_unc, pos_unc):
 
     """
     rng = np.random.default_rng()
-    perturb = rng.normal(0, 1, len(variable))
+    #perturb = rng.normal(0, 1, len(variable))
+    perturb = rng.beta(1.5, 1.5, len(variable)) * 2 - 1
     
     perturbed_variable = variable.copy()
     perturbed_variable[perturb < 0] += perturb[perturb < 0] * neg_unc[perturb < 0]
@@ -1115,7 +1134,7 @@ def perturb_Placeholder(variable, neg_unc, pos_unc):
     
     return perturbed_variable
 
-def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters, bounds=None):
+def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters, bounds=None, weights=None):
     """
     Generally more flexible than ODR as we can supply a loss function, scales, 
     bounds on parameters, and more.
@@ -1152,9 +1171,36 @@ def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters
     independents = variables.loc[:, independent_variables].to_numpy().T
     dependents = variables.loc[:, dependent_variables].to_numpy().T
     
-    def residuals(parameters, independents, dependents):
+    def residuals(parameters, independents, dependents, weights=weights):
+        """
+        This needs to return "residuals" of the dependent to be minimized
+        AFAIK, in principle, if we recast each function as dependent 
+        only on the pressure we could back out a residual in all spatial
+        dimensions
+
+        Parameters
+        ----------
+        parameters : TYPE
+            DESCRIPTION.
+        independents : TYPE
+            DESCRIPTION.
+        dependents : TYPE
+            DESCRIPTION.
+        weights : TYPE, optional
+            DESCRIPTION. The default is weights.
+
+        Returns
+        -------
+        zero : TYPE
+            DESCRIPTION.
+
+        """
         rhs = function(parameters=parameters, coordinates=independents)
+        
         zero = rhs - dependents
+        if weights is not None:
+            zero *= weights
+        
         return zero
     
     if bounds is None:
@@ -1203,7 +1249,7 @@ def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameter
     
     odr_fit = odr.ODR(data, model, 
                       beta0 = initial_parameters,
-                      maxit=100)
+                      maxit=1000)
     
     odr_result = odr_fit.run()
     
@@ -1216,7 +1262,7 @@ def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameter
               'parameters_stddev': odr_result.sd_beta,
               'rmsd': rmsd,
               'mae': mae}
-    breakpoint()
+    #breakpoint()
     return result
 
 
