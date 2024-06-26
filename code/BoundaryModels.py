@@ -73,7 +73,7 @@ def convert_SphericalSolarToCylindricalSolar(r, t, p):
     return np.array([rho, phi, ell])
 
 # =============================================================================
-# Section 2: Functional forms for the boundaries
+# Section 1.5: 3D Functional Forms for the boundaries
 # =============================================================================
 def Shuelike_Static(parameters=[], coordinates=[], variables=False):
     """
@@ -102,6 +102,10 @@ def Shuelike_Static(parameters=[], coordinates=[], variables=False):
     r = r0 * (2/(1 + np.cos(t)))**a0
 
     return r
+# =============================================================================
+# Section 2: Functional forms for the boundaries
+# =============================================================================
+
 def Shuelike(parameters=[], coordinates=[], variables=False):
     """
     r = r_0 (2/(1 + cos(theta)))^alpha
