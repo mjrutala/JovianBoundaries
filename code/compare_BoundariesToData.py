@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy import odr
 import pandas as pd
+from tqdm import tqdm
 
 from scipy.optimize import least_squares
 
@@ -755,7 +756,13 @@ def runner(boundary = 'MP', parameter_distributions=False):
     sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
     
     #   Select boundary model
-    boundary_models = {'Shuelike': {'model': BM.Shuelike, 
+    boundary_models = {'Shuelike_Static' : {'model': BM.Shuelike_Static,
+                                            'params': ['r0', 'a0'],
+                                            'guess': [60, 0.5],
+                                            'bounds': ([30, 0.5],
+                                                       [200, 1.0])
+                                            },
+                       'Shuelike': {'model': BM.Shuelike, 
                                     'params': ['r0', 'r1', 'a0', 'a1'], 
                                     'guess': [60, -0.155, 0.5, -0.1],
                                     'bounds': ([0, -0.5, 0.2, -1.0],
@@ -781,7 +788,7 @@ def runner(boundary = 'MP', parameter_distributions=False):
                                    'guess': [-0.134, 0.488, -0.581, -0.225, -0.186, -0.016, -0.014, 0.096, -0.814,  -0.811, -0.050, 0.168]}
                        }
     #boundary_model = boundary_models['Shuelike']
-    boundary_model = boundary_models['Shuelike']
+    boundary_model = boundary_models['Shuelike_Static']
 
     #   Read in a map which gives weights for any crossings
     density_df = pd.read_csv('/Users/mrutala/projects/JupiterBoundaries/' + weights_filename)
@@ -799,28 +806,42 @@ def runner(boundary = 'MP', parameter_distributions=False):
         
         hourly_crossing_data.loc[ind, 'weights'] = density_df.iloc[np.argmin(minimize)]['density']
     
+    breakpoint()
+    flank = 'dusk'
+    if flank == 'dawn':
+        hourly_crossing_data = hourly_crossing_data.query('y_JSS < 0')
+    else:
+        hourly_crossing_data = hourly_crossing_data.query('y_JSS > 0')
+    
     # Here: add a loop for MC and a function which perturbs the variables
-    n_mc = 1000
+    n_mc = 500
     stats = {'parameters': [], 
              'rmsd': [],
              'mae': [],
              'joy_rmsd': [],
              'joy_mae': []}
-    for i in range(n_mc):
+    for i in tqdm(range(n_mc)):
         
+        #   Extract the x, y, z positions and perturb them according to their uncertainties
         p_x = perturb_Gaussian(*hourly_crossing_data.loc[:, ['x_JSS', 'x_unc_JSS']].to_numpy().T)
         p_y = perturb_Gaussian(*hourly_crossing_data.loc[:, ['y_JSS', 'y_unc_JSS']].to_numpy().T)
         p_z = perturb_Gaussian(*hourly_crossing_data.loc[:, ['z_JSS', 'z_unc_JSS']].to_numpy().T)
         
+        #   Convert xyz to r, theta (increasing nose -> tail), 
+        #   phi (increasing north -> dawn -> midnight -> dusk)
         r, t, p = BM.convert_CartesianToSphericalSolar(p_x, p_y, p_z)
         
-        perturbed_hcd = hourly_crossing_data.loc[:, ['direction', 'notes']]
+        #   Add these to a new dataframe
+        perturbed_hcd = hourly_crossing_data.loc[:, ['direction', 'notes', 'weights']]
         perturbed_hcd = perturbed_hcd.assign(**{'x': p_x, 'y': p_y, 'z': p_z, 'abs_z': np.abs(p_z), 
                                                 'r': r, 't': t, 'p': p})
         
+        #   Similarly perturb the modeled pressures, than add them
         p_p_dyn = perturb_Placeholder(*sw_mme.loc[:, ['p_dyn', 'p_dyn_neg_unc', 'p_dyn_pos_unc']].to_numpy().T)
         perturbed_sw_mme = pd.DataFrame({'p_dyn': p_p_dyn}, index=sw_mme.index)
         
+        #   !!!! Probably best to bootstrap resample as well--
+        #   this ought to help preserve the internal variation of the data
         #   Resampling of data
         # rng = np.random.default_rng()
         # bootstrap_indx = np.sort(rng.integers(0, len(perturbed_hcd)-1, len(perturbed_hcd)))
@@ -829,13 +850,20 @@ def runner(boundary = 'MP', parameter_distributions=False):
         
         #weights = np.zeros(len (perturbed_hcd)) + 1.0
         
-        res = fit_Boundary_withLS(perturbed_hcd, perturbed_sw_mme, 
+        pressures = np.arange(0.01,0.11,0.01)
+        pressures = [-np.inf, *pressures, np.inf]
+        res = fit_3DBoundary_withLS(perturbed_hcd, perturbed_sw_mme, 
                                   boundary_model['model'], 
                                   boundary_model['guess'], 
                                   boundary_model['bounds'],
-                                  weights = hourly_crossing_data['weights'].to_numpy())
+                                  weights = hourly_crossing_data['weights'].to_numpy(),
+                                  pressures=pressures)
         
-        #res = fit_Boundary_withODR(perturbed_hcd, perturbed_sw_mme, boundary_model['model'], boundary_model['guess'])
+        # res = fit_Boundary_withODR(perturbed_hcd, 
+        #                            perturbed_sw_mme, 
+        #                            boundary_model['model'], 
+        #                            boundary_model['guess'],
+        #                            weights = hourly_crossing_data['weights'].to_numpy())
         
         stats['parameters'].append(res['parameters'])
         
@@ -855,6 +883,65 @@ def runner(boundary = 'MP', parameter_distributions=False):
     
     parameters = np.array(stats['parameters'])
     
+    pressures_for_plotting = (np.array(pressures[:-1]) + np.array(pressures[1:]))/2.
+    if pressures_for_plotting[0] == -np.inf:
+        pressures_for_plotting[0] = np.array(pressures)[np.isfinite(pressures)][0]
+    if pressures_for_plotting[-1] == np.inf:
+        pressures_for_plotting[-1] = np.array(pressures)[np.isfinite(pressures)][-1]
+    
+    fig, axs = plt.subplots(nrows = np.shape(parameters)[2], ncols=2)
+    
+    for param_number in range(np.shape(parameters)[2]):
+        
+        #   Plot all but the last point (plot the last one later with a label)
+        for i in range(n_mc-1):
+            for ax in axs[param_number, :]:
+                ax.scatter(pressures_for_plotting, parameters[i, :, param_number],
+                           alpha = 0.01, color='black')       
+        
+        mean_param = np.nanmean(parameters[:,:,param_number], axis=0)
+        median_param = np.nanmedian(parameters[:,:,param_number], axis=0)
+        for ax in axs[param_number, :]:
+            
+            #   Plot the final point in the distribution with a label
+            ax.scatter(pressures_for_plotting, parameters[i+1, :, param_number],
+                       alpha = 0.01, color='black', label='Fits to Perturbed Data')
+            #   Plot the means
+            ax.scatter(pressures_for_plotting, mean_param,
+                       color='C0', label='Mean')
+            #   Plot the medians
+            ax.scatter(pressures_for_plotting, median_param,
+                       color='C3', label='Median')
+        
+        axs[param_number, 0].set(xscale='log', yscale='log')
+        
+        def f_linear(x, m, b): return m*x + b
+        popt, pcov = curve_fit(f_linear, 
+                               np.log10(pressures_for_plotting[2:-1]), 
+                               np.log10(median_param[2:-1]))
+        r_p_dyn_dependence = popt[0]
+        axs[param_number, 0].plot(pressures_for_plotting[2:-1],
+                                  10**popt[1] * pressures_for_plotting[2:-1]**popt[0],
+                                  label = r'r = {:.2f} $p_{{dyn}}^{:.2f}$'.format(10**popt[1], popt[0]))
+        
+        def f_Shuelike(x, r0, r1): return r0 + r1 * x**r_p_dyn_dependence
+        popt, pcov = curve_fit(f_Shuelike,
+                               pressures_for_plotting[2:-1],
+                               median_param[2:-1])
+        axs[param_number, 1].plot(pressures_for_plotting[2:-1],
+                                  f_Shuelike(pressures_for_plotting[2:-1], *popt),
+                                  label = r'r = {:.2f} + {:.2f} $p_{{dyn}}^{{ {:.2f} }}$'.format(popt[0], popt[1], r_p_dyn_dependence))
+        
+        
+    for ax in axs.flatten():
+        ax.legend()
+    
+    axs[0,0].set(ylabel = 'Bowshock Distance [R_J]')
+    fig.supxlabel(r'Solar Wind $p_{dyn}$ [nPa]')
+    plt.show()
+        
+    
+    breakpoint()
     plot_ParameterDistributions(parameters.T, names = boundary_model['params'])
     
     #   Quick plot of RMSD, MAE
@@ -1066,7 +1153,7 @@ def runner(boundary = 'MP', parameter_distributions=False):
 
 def plot_ParameterDistributions(parameters_arr, names = None):
     
-    nplots = np.shape(parameters_arr)[0]
+    nplots = np.shape(parameters_arr)
     
     nrows = int(np.floor(np.sqrt(nplots)))
     ncols = int(np.ceil(nplots / nrows))
@@ -1224,7 +1311,122 @@ def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters
 
     return result
 
-def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameters, weights=False):
+def fit_3DBoundary_withLS(crossings, solarwind_model, function, initial_parameters, bounds=None, weights=None, pressures=None):
+    """
+    Generally more flexible than ODR as we can supply a loss function, scales, 
+    bounds on parameters, and more.
+    
+    Since we perform custom uncertainty analysis with perturbations, we don't
+    need the uncertainty-handling of ODR
+
+    Parameters
+    ----------
+    crossings : TYPE
+        DESCRIPTION.
+    solarwind_model : TYPE
+        DESCRIPTION.
+    function : TYPE
+        DESCRIPTION.
+    initial_parameters : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
+    
+    def residuals(parameters, independents, dependents):
+        """
+        This needs to return "residuals" of the dependent to be minimized
+        AFAIK, in principle, if we recast each function as dependent 
+        only on the pressure we could back out a residual in all spatial
+        dimensions
+
+        Parameters
+        ----------
+        parameters : TYPE
+            DESCRIPTION.
+        independents : TYPE
+            DESCRIPTION.
+        dependents : TYPE
+            DESCRIPTION.
+        weights : TYPE, optional
+            DESCRIPTION. The default is weights.
+
+        Returns
+        -------
+        zero : TYPE
+            DESCRIPTION.
+
+        """
+        rhs = function(parameters=parameters, coordinates=independents)
+        
+        zero = rhs - dependents
+        if residual_weights is not None:
+            zero *= residual_weights
+        
+        return zero
+    
+    
+    #   Fetch the expected variables from the function being fit
+    independent_variables, dependent_variables = function(variables=True)
+    
+    if bounds is None:
+        bounds = ([-np.inf] * len(initial_parameters),
+                  [np.inf] * len(initial_parameters))
+    
+    #   Add the model parameters as variables, 
+    #   then take only times with both model and crossing
+    variables = pd.concat([crossings, solarwind_model], axis=1, join="inner")
+    variables = variables.dropna(how='any')
+    
+    if pressures is None:
+        pressures = [-np.inf, np.inf]
+    
+    #   Analyze each pressure bin individually, interpreting the 
+    #   inputs as bin edges (a la hist), but including two extra 
+    #   bins for all lower and higher than pressures
+    
+    #   Stirng pressures for query search
+    pressures = [str(p) for p in pressures]
+    fit_params, rmsd, mae = [], [], []
+    for left_p, right_p in zip(pressures[:-1], pressures[1:]):
+        
+        subset_variables = variables.query('{} < p_dyn <= {}'.format(left_p, right_p))
+        
+        if subset_variables.shape[0] == 0:
+            fit_params.append([np.nan] * len(initial_parameters))
+            rmsd.append(np.nan)
+            mae.append(np.nan)
+        else:
+            independents = subset_variables.loc[:, independent_variables].to_numpy().T
+            dependents = subset_variables.loc[:, dependent_variables].to_numpy().T
+            residual_weights = subset_variables.loc[:, 'weights']
+            
+            res_lsq = least_squares(residuals, initial_parameters, 
+                                    args=(independents, dependents),
+                                    bounds = bounds,
+                                    x_scale = 'jac',
+                                    loss='linear')
+                    
+            fit_params.append(res_lsq.x)
+        
+            #   Get errors
+            estimated_dependents = function(res_lsq.x, independents)
+            rmsd.append(np.sqrt((1/len(dependents)) * np.sum((dependents - estimated_dependents)**2)))
+            mae.append(np.mean(np.abs(dependents - estimated_dependents)))
+            
+
+    
+    result = {'parameters': np.array(fit_params),
+              'rmsd': rmsd,
+              'mae': mae}
+
+    return result
+
+def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameters, weights=None):
     
     #   Add the model parameters as variables, 
     #   then take only times with both model and crossing
@@ -1242,8 +1444,11 @@ def fit_Boundary_withODR(crossings, solarwind_model, function, initial_parameter
     # data = odr.RealData(independents, dependentd, 
     #                   sx = indies_sigma,
     #                    sy = dies_sigma)
-    if weights:
-        data = odr.Data(independents, dependents, wd = 0, we = 0)
+    if weights is not None:
+        data = odr.Data(independents, 
+                        dependents, 
+                        wd = np.array([weights] * len(independent_variables)),
+                        we = weights)
     else:
         data = odr.Data(independents, dependents)
     
