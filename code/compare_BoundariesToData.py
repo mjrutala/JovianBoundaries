@@ -795,6 +795,9 @@ def runner(boundary = 'MP', parameter_distributions=False):
     
     rho, phi, ell = BM.convert_CartesianToCylindricalSolar(*hourly_crossing_data.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
     hourly_crossing_data = hourly_crossing_data.assign(**{'rho': rho, 'phi': phi, 'ell': ell})
+    
+    r, t, p = BM.convert_CartesianToSphericalSolar(*hourly_crossing_data.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
+    hourly_crossing_data = hourly_crossing_data.assign(**{'r': r, 't': t, 'p': p})
         
     #   The density DataFrame describes probability densities for binned rho, phi, ell
     #   So if you find the closest value of rho, phi, ell, you get the weight
@@ -806,8 +809,17 @@ def runner(boundary = 'MP', parameter_distributions=False):
         
         hourly_crossing_data.loc[ind, 'weights'] = density_df.iloc[np.argmin(minimize)]['density']
     
+    
+    fig, ax = plt.subplots()
+    ax.scatter(*hourly_crossing_data.query('y_JSS < 0')[['ell', 'rho']].to_numpy().T,
+               color='xkcd:gold', marker='x', label='Dawn')
+    ax.scatter(*hourly_crossing_data.query('y_JSS > 0')[['ell', 'rho']].to_numpy().T,
+               color='xkcd:blue', marker='x', label='Dusk')
+    ax.set(xlabel = r'$x_{JSS}$ [R$_J$]', 
+           ylabel = r'$\rho = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [R$_J$]')
+    plt.show()
     breakpoint()
-    flank = 'dusk'
+    flank = 'dawn'
     if flank == 'dawn':
         hourly_crossing_data = hourly_crossing_data.query('y_JSS < 0')
     else:
@@ -891,6 +903,7 @@ def runner(boundary = 'MP', parameter_distributions=False):
     
     fig, axs = plt.subplots(nrows = np.shape(parameters)[2], ncols=2)
     
+    
     for param_number in range(np.shape(parameters)[2]):
         
         #   Plot all but the last point (plot the last one later with a label)
@@ -940,6 +953,42 @@ def runner(boundary = 'MP', parameter_distributions=False):
     fig.supxlabel(r'Solar Wind $p_{dyn}$ [nPa]')
     plt.show()
         
+    breakpoint()
+    
+    fig, ax = plt.subplots()
+    ax.scatter(*hourly_crossing_data.query('y_JSS < 0')[['ell', 'rho']].to_numpy().T,
+               color='xkcd:gold', marker='x', label='Dawn')
+    ax.scatter(*hourly_crossing_data.query('y_JSS > 0')[['ell', 'rho']].to_numpy().T,
+               color='xkcd:blue', marker='x', label='Dusk')
+    ax.set(xlabel = r'$x_{JSS}$ [R$_J$]', 
+           ylabel = r'$\rho = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [R$_J$]')
+    
+    #   Plot example boundary
+    test_t = np.linspace(np.pi, -np.pi, 100)
+    test_p = np.zeros(100) - np.pi
+    dummy = np.zeros(100)
+    
+    #test_r = BM.Shuelike_Static([(53.81 * 0.01**(-0.05)), 0.5], [test_t, test_p, dummy])
+    test_r = BM.Shuelike_Static([(37.63 * 0.01**(-0.15)), 0.5], [test_t, test_p, dummy])
+                       
+    ax.plot(test_r * np.cos(test_t), test_r * np.sin(test_t),
+            color='C0', label = r'$p_{{dyn}} = {:.2f} nPa$'.format(0.01))
+    
+    #test_r = BM.Shuelike_Static([(53.81 * 0.04**(-0.05)), 0.5], [test_t, test_p, dummy])
+    test_r = BM.Shuelike_Static([(37.63 * 0.04**(-0.15)), 0.5], [test_t, test_p, dummy])
+                       
+    ax.plot(test_r * np.cos(test_t), test_r * np.sin(test_t),
+            color='C1', label = r'$p_{{dyn}} = {:.2f} nPa$'.format(0.03))
+    
+    #test_r = BM.Shuelike_Static([(53.81 * 0.08**(-0.05)), 0.5], [test_t, test_p, dummy])
+    test_r = BM.Shuelike_Static([(37.63 * 0.08**(-0.15)), 0.5], [test_t, test_p, dummy])
+                       
+    ax.plot(test_r * np.cos(test_t), test_r * np.sin(test_t),
+            color='C5', label = r'$p_{{dyn}} = {:.2f} nPa$'.format(0.08))
+    
+    ax.legend()
+    ax.set(xlim = [-100, 20], ylim = [30, 120])
+    plt.show()
     
     breakpoint()
     plot_ParameterDistributions(parameters.T, names = boundary_model['params'])
