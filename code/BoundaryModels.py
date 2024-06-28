@@ -93,9 +93,9 @@ def Shuelike_Static(parameters=[], coordinates=[], variables=False):
 
     """
     if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
+        return ('t'), 'r'
     
-    t, p, p_dyn = coordinates
+    t = coordinates
     r0, a0 = parameters
 
     
@@ -103,7 +103,7 @@ def Shuelike_Static(parameters=[], coordinates=[], variables=False):
 
     return r
 # =============================================================================
-# Section 2: Functional forms for the boundaries
+# Section 2: 4D Functional forms for the boundaries
 # =============================================================================
 
 def Shuelike(parameters=[], coordinates=[], variables=False):
