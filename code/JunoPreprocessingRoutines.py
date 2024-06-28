@@ -197,17 +197,12 @@ def plot_CrossingsAndTrajectories():
     
     import matplotlib as mpl
     import matplotlib.pyplot as plt
-    
-    mp_crossing_data = read_Louis2023_CrossingList(mp=True)
+
+    mp_crossing_data = make_CombinedCrossingsList(boundary = 'MP')
     mp_crossing_data = make_HourlyCrossingList(mp_crossing_data)
     
     #   Bow Shock Crossings
-    bs_crossing_data_Louis2023 = read_Louis2023_CrossingList(bs=True)
-    
-    bs_crossing_data_Kurth = read_Kurth_CrossingList(bs=True)
-    bs_crossing_data_Kurth = bs_crossing_data_Kurth[bs_crossing_data_Kurth['direction'].notna()]
-    
-    bs_crossing_data = pd.concat([bs_crossing_data_Louis2023, bs_crossing_data_Kurth], axis=0, join="outer")
+    bs_crossing_data = make_CombinedCrossingsList(boundary = 'BS')
     bs_crossing_data = make_HourlyCrossingList(bs_crossing_data)
     
     #   Load SPICE kernels for positions of Juno
