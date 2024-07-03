@@ -17,6 +17,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from scipy.optimize import least_squares
+from sklearn.mixture import GaussianMixture
 
 import sys
 import JoyBoundaryCoords as JBC
@@ -28,6 +29,7 @@ import BoundaryModels as BM
 import JunoPreprocessingRoutines as JPR 
 
 plt.style.use('/Users/mrutala/code/python/mjr.mplstyle')
+#plt.style.use('/Users/mrutala/code/python/mjr_presentation.mplstyle')
 
 R_J = 71492.
 
@@ -491,17 +493,36 @@ def validate_MME():
     # combined_mme_p_dyn = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
     #                                      sw_mme['p_dyn'],
     #                                      sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
-    approx_mme_speed = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
-                                       sw_mme['p_dyn'],
-                                       sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
     
-    model_hist, _ = np.histogram(np.log10(approx_mme_speed), p_dyn_bin_edges, density=True)
+    # approx_mme_p_dyn = np.concatenate([sw_mme['p_dyn']+sw_mme['p_dyn_pos_unc'], 
+    #                                    sw_mme['p_dyn'],
+    #                                    sw_mme['p_dyn']-sw_mme['p_dyn_neg_unc']])
     
+    #   For histogram densities, the numbers of observations need not match
+    #   So we're free to over sample to fully explore the uncertainties
+    calc_p_dyn_perturb, p_dyn_perturb = [], []
+    for i in range(100):
+        
+        n_tot_p = perturb_Placeholder(sw_mme['n_tot'], sw_mme['n_tot_neg_unc'], sw_mme['n_tot_pos_unc'])
+        u_mag_p = perturb_Placeholder(sw_mme['u_mag'], sw_mme['u_mag_neg_unc'], sw_mme['u_mag_pos_unc'])
+        calc_p_dyn_perturb.append((1.67e-27) * (n_tot_p * 1e6) * (u_mag_p * 1e3)**2 * 1e9)
+        
+        p_dyn_perturb.append(perturb_Placeholder(sw_mme['p_dyn'], 
+                                                 sw_mme['p_dyn_neg_unc'], 
+                                                 sw_mme['p_dyn_pos_unc']))
+    
+    approx_mme_p_dyn = np.array(p_dyn_perturb)
+    model_hist, _ = np.histogram(np.log10(approx_mme_p_dyn), p_dyn_bin_edges, density=True)
     ax.stairs(model_hist, p_dyn_bin_edges, linewidth=2, label='MME', color='C0', zorder=2)
+    
+    # calc_mme_p_dyn = np.array(calc_p_dyn_perturb)
+    # model_hist2, _ = np.histogram(np.log10(calc_mme_p_dyn), p_dyn_bin_edges, density=True)
+    # ax.stairs(model_hist2, p_dyn_bin_edges, linewidth=2, label='MME (Calc.)', color='C5', zorder=2)
+    
     ax.stairs(data_hist, p_dyn_bin_edges, linewidth=2, label='All Data', color='C1', zorder=1)
     ax.set(xlabel=r'Log$_{10}$ Dynamic Pressure / nPa',
            ylabel='Density')
-
+    
     ax.legend()
     ax.xaxis.set_major_locator(MultipleLocator(1))
     ax.xaxis.set_minor_locator(MultipleLocator(0.1))
@@ -591,8 +612,48 @@ def validate_MME():
                     transparent=True,
                     dpi=800)
     plt.show()
+    
+    # =============================================================================
+    #     Final plot of MME long term results
+    # =============================================================================
+    fig, axs = plt.subplots(nrows=3, figsize=(12,4), sharex=True)
+    plt.subplots_adjust(bottom=0.125, left=0.06, top=0.975, right=0.99375)
+    
+    axs[0].plot(sw_mme['u_mag'], color='C3')
+    axs[0].fill_between(sw_mme.index, 
+                        sw_mme['u_mag'] - sw_mme['u_mag_neg_unc'], 
+                        sw_mme['u_mag'] + sw_mme['u_mag_pos_unc'],
+                        color='C3', alpha=0.5)
+    axs[0].set_ylabel('Flow Speed \n [km/s]', fontsize='x-large')
         
+    axs[1].plot(sw_mme['p_dyn'], color='C4')
+    axs[1].fill_between(sw_mme.index, 
+                        sw_mme['p_dyn'] - sw_mme['p_dyn_neg_unc'], 
+                        sw_mme['p_dyn'] + sw_mme['p_dyn_pos_unc'],
+                        color='C4', alpha=0.5)
+    axs[1].set_ylabel('Pressure \n [nPa]', fontsize='x-large')
+    
+    axs[2].plot(sw_mme['B_mag'], color='C5')
+    axs[2].fill_between(sw_mme.index, 
+                        sw_mme['B_mag'] - sw_mme['B_mag_neg_unc'], 
+                        sw_mme['B_mag'] + sw_mme['B_mag_pos_unc'],
+                        color='C5', alpha=0.5)
+    axs[2].set(xlim = (dt.datetime(2016,1,1), dt.datetime(2024,7,9)))
+    axs[2].set_xlabel('Year', fontsize='x-large')
+    axs[2].set_ylabel('IMF Stength \n [nT]', fontsize='x-large')
+    
+    for ax in axs:
+        for side in ['top','bottom','left','right']:
+            ax.spines[side].set_linewidth(2)
+            ax.tick_params('both', width=2, which='major')
+            ax.tick_params('both', width=2, which='minor')
+ 
+    fig.align_ylabels()
+    plt.savefig('/Users/mrutala/presentations/MOP2024_Poster/MME_Results.png', transparent=True)
+    plt.show()
+    
     breakpoint()
+    
     return
 
 # def compare_MMESHToData_Overlapping():
@@ -731,76 +792,167 @@ def compare_Pressures():
     plt.show()
 
 
-
+def boundary_model_init(model_name):
+    #   Select boundary model
+    bm = {'Shuelike_Static' : {'model': BM.Shuelike_Static,
+                               'params': ['r_0', 'a_0'],
+                               'guess': [60, 0.95],
+                               'bounds': ([20, 0.7],
+                                          [80, 1.2])
+                               },
+          'Shuelike': {'model': BM.Shuelike, 
+                       'params': ['r0', 'r1', 'a0', 'a1'], 
+                       'guess': [60, -0.155, 0.5, -0.1],
+                       'bounds': ([0, -0.5, 0.2, -1.0],
+                                  [200, -0.0, 0.8, 1.0])
+                       },
+          'Shuelike_UniformPressureExponent': {'model': BM.Shuelike_UniformPressureExponent, 
+                                               'params': ['r0', 'r1', 'a0', 'a1'], 
+                                               'guess': [60, -0.15, 0.5, 1.0]
+                                               },
+          'Shuelike_NonuniformPressureExponent': {'model': BM.Shuelike_NonuniformPressureExponent, 
+                                                       'params': ['r0', 'r1', 'a0', 'a1', 'a2'], 
+                                                       'guess': [60, -0.15, 0.5, 1.0, 1.0]},
+          'Shuelike_AsymmetryCase1': {'model': BM.Shuelike_AsymmetryCase1, 
+                                      'params': ['r0', 'r1', 'r2', 'r3', 'r4', 'a0', 'a1'], 
+                                      'guess': [50, -0.15, 5, 5, 0, 0.5, 0.0],
+                                      'bounds': ([30, -0.3, 0, 0, -3.14, 0.3, -1.0],
+                                                 [80, -0.1, 10, 10, 3.14, 0.8, 1.0])
+                                      },
+          'Shuelike_Asymmetric': {'model': BM.Shuelike_Asymmetric, 
+                                  'params': ['r0', 'r1', 'r2', 'a0', 'a1', 'a2'], 
+                                  'guess': [60, -0.15, 1, 0.5, 1.0, 1.0]
+                                  },
+          'Shuelike_MOP_Asymmetric': {'model': BM.Shuelike_MOP_Asymmetric, 
+                                      'params': ['r0', 'r1', 'r2', 'r3', 'a0', 'a1', 'a2'], 
+                                      'guess': [60, 5, -5, -0.2, 0.7, 0.1, 0.1],
+                                      'bounds': [[30, -10, -10, -0.3, 0.6, 0, 0],
+                                                 [90,  10,  10, -0.05, 0.9, 0.2, 0.2]]
+                                      },
+          'Joylike': {'model': BM.Joylike, 
+                      'params': ['A0', 'A1', 'B0', 'B1', 'C0', 'C1', 'D0', 'D1', 'E0', 'E1', 'F0', 'F1'], 
+                      'guess': [-0.134, 0.488, -0.581, -0.225, -0.186, -0.016, -0.014, 0.096, -0.814,  -0.811, -0.050, 0.168]}
+                      }
+    
+    return bm[model_name]
         
+def mc_fitting(data_df, sw_df, boundary_model, n_mc=100, pressure_bin_edges = None, sigma=None):
+    
+    stats = {'parameters': {key: [] for key in boundary_model['params']}, 
+             'rmsd': [],
+             'mae': [],
+             'joy_rmsd': [],
+             'joy_mae': []}
+    
+    if pressure_bin_edges is None:
+        pressure_bin_edges = [-np.inf, np.inf]
+        
+    for i in tqdm(range(n_mc)):
+        
+        #   Extract the x, y, z positions and perturb them according to their uncertainties
+        p_x = perturb_Gaussian(*data_df.loc[:, ['x', 'x_unc']].to_numpy().T)
+        p_y = perturb_Gaussian(*data_df.loc[:, ['y', 'y_unc']].to_numpy().T)
+        p_z = perturb_Gaussian(*data_df.loc[:, ['z', 'z_unc']].to_numpy().T)
+        
+        #   Convert xyz to r, theta (increasing nose -> tail), 
+        #   phi (increasing north -> dawn -> midnight -> dusk)
+        r, t, p = BM.convert_CartesianToSphericalSolar(p_x, p_y, p_z)
+        
+        #   Add these to a new dataframe
+        perturb_data_df = data_df.loc[:, ['direction', 'notes', 'weights']]
+        perturb_data_df = data_df.assign(**{'x': p_x, 'y': p_y, 'z': p_z,
+                                       'r': r, 't': t, 'p': p})
+        
+        #   Similarly perturb the modeled pressures, than add them
+        p_p_dyn = perturb_Placeholder(*sw_df.loc[:, ['p_dyn', 'p_dyn_neg_unc', 'p_dyn_pos_unc']].to_numpy().T)
+        perturb_sw_df = pd.DataFrame({'p_dyn': p_p_dyn}, index=sw_df.index)
+           
+        #   !!!! Probably best to bootstrap resample as well--
+        #   this ought to help preserve the internal variation of the data
+        #   Resampling of data
+        # rng = np.random.default_rng()
+        # bootstrap_indx = np.sort(rng.integers(0, len(perturb_data_df)-1, len(perturb_data_df)))
+        # perturb_data_df = perturb_data_df.iloc[bootstrap_indx, :]
+           
+        res = fit_3DBoundary_withLS(perturb_data_df, perturb_sw_df, 
+                                    boundary_model['model'], 
+                                    boundary_model['guess'], 
+                                    boundary_model['bounds'],
+                                    weights = data_df['weights'].to_numpy(),
+                                    pressures=pressure_bin_edges,
+                                    sigma=sigma)
+        
+        # res = fit_Boundary_withODR(perturbed_hcd, 
+        #                            perturbed_sw_mme, 
+        #                            boundary_model['model'], 
+        #                            boundary_model['guess'],
+        #                            weights = hourly_crossing_data['weights'].to_numpy())
+        
+        
+        #   Only record these if there are no NaNs
+        #   NaNs may crop up when perturbations cause all data points to leave the bin
+        
+        #if np.isnan(res['parameters']).any() == False:
+        for key, val in zip(stats['parameters'].keys(), res['parameters'].T):
+            stats['parameters'][key].append(val)
+           
+        #   Next, calculate the fit
+        stats['rmsd'].append(res['rmsd'])
+        stats['mae'].append(res['mae'])
+        #else:
+        #    breakpoint()
+           
+        #   Use these perturbed values to compare to Joy+ 2002
+        #   This bit might be removed if I ever get Joy+ working well
+        # joy_z = JBC.find_JoyBoundaries(perturbed_sw_mme.loc[hourly_crossing_data.index, 'p_dyn'].to_numpy(), 
+        #                                boundary=boundary, x=p_x, y=p_y)
+        # abs_z = np.abs(p_z)
+        
+        # valid_joy_indx = ~np.isnan(joy_z[0])
+        # stats['joy_rmsd'].append(np.sqrt((1/len(abs_z[valid_joy_indx])) * np.sum((abs_z[valid_joy_indx] - joy_z[0][valid_joy_indx])**2)))
+        # stats['joy_mae'].append(np.mean(np.abs(abs_z[valid_joy_indx] - joy_z[0][valid_joy_indx])))
+    
+    for key, val in stats['parameters'].items():
+        stats['parameters'][key] = np.array(val).T
+    stats['rmsd'] = np.array(stats['rmsd']).T
+    stats['mae'] = np.array(stats['mae']).T
+    stats['len'] = np.shape(stats['mae'])[1]
+    
+    return stats
 
 def runner(boundary = 'MP', parameter_distributions=False):
 
     sw_mme_filepath = '/Users/mrutala/projects/JupiterBoundaries/mmesh_run/MMESH_atJupiter_20160301-20240301_withConstituentModels.csv'
     
-    import JunoPreprocessingRoutines as PR 
-    
-    #   
+    # =============================================================================
+    #   Read the boundary crossing data 
+    # =============================================================================
     if boundary == 'MP':
         crossing_data = JPR.make_CombinedCrossingsList(boundary = 'MP')
         weights_filename = 'Magnetopause_Density.csv'
+        expected_modes = 2
     if boundary == 'BS':
-        crossing_data = JPR.make_CombinedCrossingLists(boundare = 'BS')
+        crossing_data = JPR.make_CombinedCrossingsList(boundary = 'BS')
         weights_filename = 'BowShock_Density.csv'
+        expected_modes = 1
     
     #   Only pass the datetime index, the direction of the crossing, and any notes
-    hourly_crossing_data = PR.make_HourlyCrossingList(crossing_data)
+    hourly_crossing_data = JPR.make_HourlyCrossingList(crossing_data)
+    hourly_crossing_data.rename({'x_JSS':'x', 'x_unc_JSS':'x_unc',
+                                 'y_JSS':'y', 'y_unc_JSS':'y_unc',
+                                 'z_JSS':'z', 'z_unc_JSS':'z_unc'}, 
+                                axis='columns', inplace=True)
     
-    #   Load the solar wind data and select the ensemble
-    sw_models = MMESH_reader.fromFile(sw_mme_filepath)
-    sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
+    #   Coordinates in other systems for reference
+    rpl = BM.convert_CartesianToCylindricalSolar(*hourly_crossing_data.loc[:, ['x', 'y', 'z']].to_numpy().T)
+    hourly_crossing_data[['rho', 'phi', 'ell']] = rpl.T
+    rtp = BM.convert_CartesianToSphericalSolar(*hourly_crossing_data.loc[:, ['x', 'y', 'z']].to_numpy().T)
+    hourly_crossing_data[['r', 't', 'p']] = rtp.T
     
-    #   Select boundary model
-    boundary_models = {'Shuelike_Static' : {'model': BM.Shuelike_Static,
-                                            'params': ['r0', 'a0'],
-                                            'guess': [60, 0.5],
-                                            'bounds': ([30, 0.5],
-                                                       [200, 1.0])
-                                            },
-                       'Shuelike': {'model': BM.Shuelike, 
-                                    'params': ['r0', 'r1', 'a0', 'a1'], 
-                                    'guess': [60, -0.155, 0.5, -0.1],
-                                    'bounds': ([0, -0.5, 0.2, -1.0],
-                                               [200, -0.0, 0.8, 1.0])
-                                    },
-                       'Shuelike_UniformPressureExponent': {'model': BM.Shuelike_UniformPressureExponent, 
-                                                       'params': ['r0', 'r1', 'a0', 'a1'], 
-                                                       'guess': [60, -0.15, 0.5, 1.0]},
-                       'Shuelike_NonuniformPressureExponent': {'model': BM.Shuelike_NonuniformPressureExponent, 
-                                                       'params': ['r0', 'r1', 'a0', 'a1', 'a2'], 
-                                                       'guess': [60, -0.15, 0.5, 1.0, 1.0]},
-                       'Shuelike_AsymmetryCase1': {'model': BM.Shuelike_AsymmetryCase1, 
-                                                       'params': ['r0', 'r1', 'r2', 'r3', 'r4', 'a0', 'a1'], 
-                                                       'guess': [50, -0.15, 5, 5, 0, 0.5, 0.0],
-                                                       'bounds': ([30, -0.3, 0, 0, -3.14, 0.3, -1.0],
-                                                                  [80, -0.1, 10, 10, 3.14, 0.8, 1.0])
-                                                       },
-                       'Shuelike_Asymmetric': {'model': BM.Shuelike_Asymmetric, 
-                                                       'params': ['r0', 'r1', 'r2', 'a0', 'a1', 'a2'], 
-                                                       'guess': [60, -0.15, 1, 0.5, 1.0, 1.0]},
-                       'Joylike': {'model': BM.Joylike, 
-                                   'params': ['A0', 'A1', 'B0', 'B1', 'C0', 'C1', 'D0', 'D1', 'E0', 'E1', 'F0', 'F1'], 
-                                   'guess': [-0.134, 0.488, -0.581, -0.225, -0.186, -0.016, -0.014, 0.096, -0.814,  -0.811, -0.050, 0.168]}
-                       }
-    #boundary_model = boundary_models['Shuelike']
-    boundary_model = boundary_models['Shuelike_Static']
-
     #   Read in a map which gives weights for any crossings
-    density_df = pd.read_csv('/Users/mrutala/projects/JupiterBoundaries/' + weights_filename)
-    
-    rho, phi, ell = BM.convert_CartesianToCylindricalSolar(*hourly_crossing_data.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
-    hourly_crossing_data = hourly_crossing_data.assign(**{'rho': rho, 'phi': phi, 'ell': ell})
-    
-    r, t, p = BM.convert_CartesianToSphericalSolar(*hourly_crossing_data.loc[:, ['x_JSS', 'y_JSS', 'z_JSS']].to_numpy().T)
-    hourly_crossing_data = hourly_crossing_data.assign(**{'r': r, 't': t, 'p': p})
-        
     #   The density DataFrame describes probability densities for binned rho, phi, ell
     #   So if you find the closest value of rho, phi, ell, you get the weight
+    density_df = pd.read_csv('/Users/mrutala/projects/JupiterBoundaries/' + weights_filename)
     hourly_crossing_data['weights'] = -1
     for ind, row in hourly_crossing_data.iterrows():
         minimize = (np.abs(density_df['rho'] - row['rho']) 
@@ -809,92 +961,140 @@ def runner(boundary = 'MP', parameter_distributions=False):
         
         hourly_crossing_data.loc[ind, 'weights'] = density_df.iloc[np.argmin(minimize)]['density']
     
+    # =============================================================================
+    #   Load the solar wind multi-model ensemble
+    # =============================================================================
+    sw_models = read_JunoEraSolarWind()
+    sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
     
-    fig, ax = plt.subplots()
-    ax.scatter(*hourly_crossing_data.query('y_JSS < 0')[['ell', 'rho']].to_numpy().T,
-               color='xkcd:gold', marker='x', label='Dawn')
-    ax.scatter(*hourly_crossing_data.query('y_JSS > 0')[['ell', 'rho']].to_numpy().T,
-               color='xkcd:blue', marker='x', label='Dusk')
-    ax.set(xlabel = r'$x_{JSS}$ [R$_J$]', 
-           ylabel = r'$\rho = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [R$_J$]')
-    plt.show()
+    
+    boundary_model = boundary_model_init('Shuelike_Static')
+
+    
+    # fig, ax = plt.subplots(figsize = (6,4))
+    # # ax.scatter(*hourly_crossing_data.query('y < 0')[['ell', 'rho']].to_numpy().T,
+    # #            color='xkcd:gold', marker='x', label='Dawn')
+    # ax.scatter(*hourly_crossing_data.query('y > 0')[['ell', 'rho']].to_numpy().T,
+    #            color='xkcd:blue', marker='x', label='Dusk')
+    # ax.set(xlabel = r'$x_{JSS}$ [R$_J$]', 
+    #        ylabel = r'$\rho = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [R$_J$]')
+    # plt.show()
+    
+
+    # =============================================================================
+    #   Subset the data into a single region of interest
+    # =============================================================================
+    if boundary == 'MP':
+        data_subsets = {'dawn_equatorial': hourly_crossing_data.query('y < 0 & z > -10'),
+                        'dawn_lowlat': hourly_crossing_data.query('y < 0 & z < -10'),
+                        'dusk_lowlat': hourly_crossing_data.query('y > 0 & x < -14'),
+                        'dusk_midlat': hourly_crossing_data.query('y > 0 & x > -14')}
+    if boundary == 'BS':
+        data_subsets = {'dawn': hourly_crossing_data.query('y < 0'),
+                        'dusk': hourly_crossing_data.query('y > 0')}
+    
+    # subset_data = hourly_crossing_data.query('y < 0 & z > -10')  # Dawn equatorial
+    # subset_data = hourly_crossing_data.query('y < 0 & z < -10') # Dawn southern
+    
+    # subset_data = hourly_crossing_data.query('y > 0 & x > -14')  # Dusk 1
+    # subset_data = hourly_crossing_data.query('y > 0 & x < -14')  # Dusk 2
+    
+    
+    # =============================================================================
+    #   Monte-Carlo w/ error perturbation
+    # =============================================================================
+    n_mc = 1000
+    
+    #pressure_bin_edges = np.arange(0.01, 0.11, 0.01)
+    #pressure_bin_edges = [-np.inf, *pressure_bin_edges, np.inf]
+    pressure_bin_edges = np.arange(0.01, 0.11, 0.01)
+    
+    pressures = (pressure_bin_edges[:-1] + pressure_bin_edges[1:])/2.
+    pressure_errs = [pressures - pressure_bin_edges[:-1],
+                     pressure_bin_edges[1:] - pressures]
+    
+    for subset_name, subset_data in data_subsets.items():
+        mcfit = mc_fitting(subset_data, sw_mme, boundary_model, 
+                           n_mc = n_mc, 
+                           pressure_bin_edges = pressure_bin_edges,
+                           sigma=10)
+        
+        n_mc = mcfit['len']
+        pressures_grid = np.tile(pressures, (n_mc, 1)).T
+        
+        #   Make a plot for each fit parameter
+        for i_key, key in enumerate(mcfit['parameters'].keys()):
+            fig, ax = plt.subplots(figsize=(6,6))
+            plt.subplots_adjust(bottom=0.125, left=0.125,
+                                top=0.75, right=0.975)
+            
+            #   Loop over pressure to measure each distribution
+            pressure_fits = {'mean': [], 'sigma': [], 'fraction': []}
+            for i_pressure, pressure in enumerate(pressures):
+                param_values = mcfit['parameters'][key][i_pressure]
+                param_values = param_values[~np.isnan(param_values)].reshape(-1,1)
+                
+                gm_fit = GaussianMixture(n_components=expected_modes).fit(param_values)
+                
+                mean = gm_fit.means_.flatten()
+                sigma = np.sqrt(gm_fit.covariances_.flatten())
+                fraction = gm_fit.weights_.flatten()
+                
+                mean_index = np.argsort(mean) # Sort so each mode has ~consistent values
+                
+                pressure_fits['mean'].append(mean[mean_index])
+                pressure_fits['sigma'].append(sigma[mean_index])
+                pressure_fits['fraction'].append(fraction[mean_index])
+            
+            for pfit_key in pressure_fits.keys():
+                pressure_fits[pfit_key] = np.array(pressure_fits[pfit_key]).T
+            
+            #   Scatter plot of the individual MC fits
+            ax.scatter(pressures_grid.flatten(), mcfit['parameters'][key].flatten(),
+                       color='white', alpha=0.01, marker='x', s=48,
+                       label = 'MC Fits')
+            
+            def power_func(c, x):
+                return c[0] * x ** c[1]
+            def power_func_residuals(c, x, y):
+                return y - power_func(c, x)
+            
+           
+            for i_mode in range(expected_modes):
+                
+                #   Then plot the fit pressure normal distributions on top
+                ax.errorbar(pressures, pressure_fits['mean'][i_mode],
+                            xerr = pressure_errs,
+                            yerr = pressure_fits['sigma'][i_mode],
+                            label = 'Mode {}'.format(i_mode),
+                            linestyle='none',
+                            color = 'C{}'.format(i_mode))
+                
+                #   Then fit a curve to those pressure distributions
+                lsq_fit = least_squares(power_func_residuals, [30,-0.2],
+                                        args = (pressures, pressure_fits['mean'][i_mode]))
+                ax.plot(pressures, power_func(lsq_fit.x, pressures),
+                        label = r'${} = {:.1f} \times p_{{dyn}}^{{ {:.2f} }}$'.format(key, *lsq_fit.x),
+                        color = 'C{}'.format(i_mode), linestyle='--')
+            
+            ax.set(ylim = np.array(boundary_model['bounds']).T[i_key])
+            ax.set(ylabel = r'$r_{0}$ [$R_J$] (nose distance)',
+                   xlabel = r'$p_{dyn}$ [nPa]')
+            leg = ax.legend(loc = 'lower center', bbox_to_anchor=(0.5,1.01), ncol=2)
+            for lh in leg.legend_handles: 
+                lh.set_alpha(1)
+
+            ax.annotate('Region: {}'.format(subset_name.replace('_', ' ')), (0,1), (1,-1),
+                        xycoords='axes fraction', textcoords='offset fontsize',
+                        ha='left', va='top')
+
+            plt.show()
+            
+
+    
+        #breakpoint()
+    
     breakpoint()
-    flank = 'dawn'
-    if flank == 'dawn':
-        hourly_crossing_data = hourly_crossing_data.query('y_JSS < 0')
-    else:
-        hourly_crossing_data = hourly_crossing_data.query('y_JSS > 0')
-    
-    # Here: add a loop for MC and a function which perturbs the variables
-    n_mc = 500
-    stats = {'parameters': [], 
-             'rmsd': [],
-             'mae': [],
-             'joy_rmsd': [],
-             'joy_mae': []}
-    for i in tqdm(range(n_mc)):
-        
-        #   Extract the x, y, z positions and perturb them according to their uncertainties
-        p_x = perturb_Gaussian(*hourly_crossing_data.loc[:, ['x_JSS', 'x_unc_JSS']].to_numpy().T)
-        p_y = perturb_Gaussian(*hourly_crossing_data.loc[:, ['y_JSS', 'y_unc_JSS']].to_numpy().T)
-        p_z = perturb_Gaussian(*hourly_crossing_data.loc[:, ['z_JSS', 'z_unc_JSS']].to_numpy().T)
-        
-        #   Convert xyz to r, theta (increasing nose -> tail), 
-        #   phi (increasing north -> dawn -> midnight -> dusk)
-        r, t, p = BM.convert_CartesianToSphericalSolar(p_x, p_y, p_z)
-        
-        #   Add these to a new dataframe
-        perturbed_hcd = hourly_crossing_data.loc[:, ['direction', 'notes', 'weights']]
-        perturbed_hcd = perturbed_hcd.assign(**{'x': p_x, 'y': p_y, 'z': p_z, 'abs_z': np.abs(p_z), 
-                                                'r': r, 't': t, 'p': p})
-        
-        #   Similarly perturb the modeled pressures, than add them
-        p_p_dyn = perturb_Placeholder(*sw_mme.loc[:, ['p_dyn', 'p_dyn_neg_unc', 'p_dyn_pos_unc']].to_numpy().T)
-        perturbed_sw_mme = pd.DataFrame({'p_dyn': p_p_dyn}, index=sw_mme.index)
-        
-        #   !!!! Probably best to bootstrap resample as well--
-        #   this ought to help preserve the internal variation of the data
-        #   Resampling of data
-        # rng = np.random.default_rng()
-        # bootstrap_indx = np.sort(rng.integers(0, len(perturbed_hcd)-1, len(perturbed_hcd)))
-        # breakpoint()
-        # perturbed_hcd = perturbed_hcd.iloc[bootstrap_indx, :]
-        
-        #weights = np.zeros(len (perturbed_hcd)) + 1.0
-        
-        pressures = np.arange(0.01,0.11,0.01)
-        pressures = [-np.inf, *pressures, np.inf]
-        res = fit_3DBoundary_withLS(perturbed_hcd, perturbed_sw_mme, 
-                                  boundary_model['model'], 
-                                  boundary_model['guess'], 
-                                  boundary_model['bounds'],
-                                  weights = hourly_crossing_data['weights'].to_numpy(),
-                                  pressures=pressures)
-        
-        # res = fit_Boundary_withODR(perturbed_hcd, 
-        #                            perturbed_sw_mme, 
-        #                            boundary_model['model'], 
-        #                            boundary_model['guess'],
-        #                            weights = hourly_crossing_data['weights'].to_numpy())
-        
-        stats['parameters'].append(res['parameters'])
-        
-        #   Next, calculate the fit
-        stats['rmsd'].append(res['rmsd'])
-        stats['mae'].append(res['mae'])
-        
-        #   Use these perturbed values to compare to Joy+ 2002
-        #   This bit might be removed if I ever get Joy+ working well
-        joy_z = JBC.find_JoyBoundaries(perturbed_sw_mme.loc[hourly_crossing_data.index, 'p_dyn'].to_numpy(), 
-                                       boundary=boundary, x=p_x, y=p_y)
-        abs_z = np.abs(p_z)
-        
-        valid_joy_indx = ~np.isnan(joy_z[0])
-        stats['joy_rmsd'].append(np.sqrt((1/len(abs_z[valid_joy_indx])) * np.sum((abs_z[valid_joy_indx] - joy_z[0][valid_joy_indx])**2)))
-        stats['joy_mae'].append(np.mean(np.abs(abs_z[valid_joy_indx] - joy_z[0][valid_joy_indx])))
-    
-    parameters = np.array(stats['parameters'])
-    
     pressures_for_plotting = (np.array(pressures[:-1]) + np.array(pressures[1:]))/2.
     if pressures_for_plotting[0] == -np.inf:
         pressures_for_plotting[0] = np.array(pressures)[np.isfinite(pressures)][0]
@@ -1199,6 +1399,22 @@ def runner(boundary = 'MP', parameter_distributions=False):
     
     
     return rmsd, mae
+   
+
+def read_JunoEraSolarWind():
+    """
+    A convenience function which returns the MME solar wind from file
+
+    Returns
+    -------
+    mme : DataFrame of multi-modeled solar wind conditions
+    """
+    sw_mme_filepath = ('/Users/mrutala/projects/JupiterBoundaries/' +
+                       'mmesh_run/MMESH_atJupiter_20160301-20240301' + 
+                       '_withConstituentModels.csv')
+    mme = MMESH_reader.fromFile(sw_mme_filepath)
+    return mme
+
 
 def plot_ParameterDistributions(parameters_arr, names = None):
     
@@ -1360,7 +1576,7 @@ def fit_Boundary_withLS(crossings, solarwind_model, function, initial_parameters
 
     return result
 
-def fit_3DBoundary_withLS(crossings, solarwind_model, function, initial_parameters, bounds=None, weights=None, pressures=None):
+def fit_3DBoundary_withLS(crossings, solarwind_model, function, initial_parameters, bounds=None, weights=None, pressures=None, sigma=None):
     """
     Generally more flexible than ODR as we can supply a loss function, scales, 
     bounds on parameters, and more.
@@ -1410,9 +1626,17 @@ def fit_3DBoundary_withLS(crossings, solarwind_model, function, initial_paramete
             DESCRIPTION.
 
         """
+        from scipy import stats
+        
         rhs = function(parameters=parameters, coordinates=independents)
         
-        zero = rhs - dependents
+        zero = dependents - rhs
+        
+        if sigma is not None:
+            zscore = (zero/sigma)
+            prob = stats.norm.pdf(zscore)
+            zero = zero * (1 - prob)
+        
         if residual_weights is not None:
             zero *= residual_weights
         
@@ -1449,6 +1673,7 @@ def fit_3DBoundary_withLS(crossings, solarwind_model, function, initial_paramete
             fit_params.append([np.nan] * len(initial_parameters))
             rmsd.append(np.nan)
             mae.append(np.nan)
+        
         else:
             independents = subset_variables.loc[:, independent_variables].to_numpy().T
             dependents = subset_variables.loc[:, dependent_variables].to_numpy().T
@@ -1458,17 +1683,22 @@ def fit_3DBoundary_withLS(crossings, solarwind_model, function, initial_paramete
                                     args=(independents, dependents),
                                     bounds = bounds,
                                     x_scale = 'jac',
-                                    loss='linear')
-                    
-            fit_params.append(res_lsq.x)
-        
-            #   Get errors
-            estimated_dependents = function(res_lsq.x, independents)
-            rmsd.append(np.sqrt((1/len(dependents)) * np.sum((dependents - estimated_dependents)**2)))
-            mae.append(np.mean(np.abs(dependents - estimated_dependents)))
+                                    loss='soft_l1')
             
-
-    
+            #   If the fitting fails and returns the initial guesses:
+            if (res_lsq.x == initial_parameters).all():
+                fit_params.append([np.nan] * len(initial_parameters))
+                rmsd.append(np.nan)
+                mae.append(np.nan)
+            else:
+                
+                fit_params.append(res_lsq.x)
+            
+                #   Get errors
+                estimated_dependents = function(res_lsq.x, independents)
+                rmsd.append(np.sqrt((1/len(dependents)) * np.sum((dependents - estimated_dependents)**2)))
+                mae.append(np.mean(np.abs(dependents - estimated_dependents)))
+                
     result = {'parameters': np.array(fit_params),
               'rmsd': rmsd,
               'mae': mae}
