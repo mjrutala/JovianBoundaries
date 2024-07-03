@@ -293,6 +293,45 @@ def Shuelike_Asymmetric(parameters=[], coordinates=[], variables=False):
     
     return r
 
+def Shuelike_MOP_Asymmetric(parameters=[], coordinates=[], variables=False):
+    """
+    r = r_0 (2/(1 + cos(theta)))^alpha
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    #rho, phi, ell = coordinates
+    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
+    t, p, p_dyn = coordinates
+    r0, r1, r2, r3, a0, a1, a2 = parameters
+    
+    # with np.errstate(invalid='raise'):
+    #     try: 
+    #         r_0 = r0*(p_dyn**r1)
+    #     except RuntimeError():
+    #         print('You caught the error!')
+    
+    
+    r_0 = (r0 + r1*(np.sign(np.sin(p))/2 + 1/2) + r2*(-(np.sign(np.sin(p))/2 - 1/2)) ) * ((p_dyn)**r3)
+    
+    a_0 = (a0 + a1*(np.sign(np.sin(p))/2 + 1/2) + a2*(-np.sign(np.sin(p))/2 - 1/2) )# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
+    
+    r = r_0 * (2/(1 + np.cos(t)))**a_0
+    
+    return r
+
 def Shuelike_Square(parameters=[], coordinates=[], variables=False):
     """
     r = r_0 (2/(1 + cos(theta)))^alpha
@@ -409,3 +448,33 @@ def explore_Variation(form, ranges):
     
     return
 
+
+def explore_Variation_ShueLike_Static():
+    import matplotlib.pyplot as plt
+    
+    fig, axs = plt.subplots(nrows=2, figsize=(8,8), sharex=True)
+    plt.subplots_adjust(left=0.15, bottom=0.1, top=0.975, right=0.975, hspace=0.025)
+    theta = np.linspace(-180, 180, 1000) * np.pi/180
+    
+    for r0 in [40, 50, 60, 70, 80]:
+        r = Shuelike_Static([r0, 0.6], theta)
+        axs[1].plot(r*np.cos(theta), r*np.sin(theta), label = r'$r_0$ = {:n}'.format(r0))
+        
+    for alpha in [0.3, 0.5, 0.7, 0.9, 1.1]:
+        r = Shuelike_Static([60, alpha], theta)
+        axs[0].plot(r*np.cos(theta), r*np.sin(theta), label = r'$\alpha$ = {:.1f}'.format(alpha))
+    
+    axs[0].plot(Shuelike_Static([60, 0.7], theta)*np.cos(theta), Shuelike_Static([60, 0.7], theta)*np.sin(theta), color='white', linewidth=6, zorder=-1)
+        
+    for ax in axs:
+        ax.legend(loc = 'lower left')
+        ax.set(xlim=(-300, 100), ylim=(0,200))
+        ax.set(aspect = 1)
+        
+    axs[1].set(xlabel=r'$x_{JSS}$ [$R_J$] (+ sunward)')
+    fig.supylabel(r'$\rho = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]')
+    
+    axs[0].annotate(r'For $r_0 = 60$', (1,1), (-1,-1), xycoords='axes fraction', textcoords='offset fontsize', ha='right', va='top')
+    axs[1].annotate(r'$\alpha = 0.6 = $const.', (1,1), (-1,-1), xycoords='axes fraction', textcoords='offset fontsize', ha='right', va='top')
+
+    plt.show()
