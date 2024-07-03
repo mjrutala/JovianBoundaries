@@ -191,6 +191,132 @@ def read_Ebert_CrossingList(mp=False, bs=True):
     
     return crossings
 
+def plot_CrossingsAndTrajectories_XYPlane(joy=False):
+    import spiceypy as spice
+    import numpy as np
+    
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    
+    import JoyBoundaryCoords as JBC
+
+    mp_crossing_data = make_CombinedCrossingsList(boundary = 'MP')
+    mp_crossing_data = make_HourlyCrossingList(mp_crossing_data)
+    
+    #   Bow Shock Crossings
+    bs_crossing_data = make_CombinedCrossingsList(boundary = 'BS')
+    bs_crossing_data = make_HourlyCrossingList(bs_crossing_data)
+    
+    #   Load SPICE kernels for positions of Juno
+    spice.furnsh(get_paths()['PlanetaryMetakernel'].as_posix())
+    spice.furnsh(get_paths()['JunoMetakernel'].as_posix())
+    
+    R_J = spice.bodvcd(599, 'RADII', 3)[1][1]
+    
+    #   Get all hourly trajectory info
+    earliest_time = min(np.append(bs_crossing_data.index, mp_crossing_data.index))
+    latest_time = max(np.append(bs_crossing_data.index, mp_crossing_data.index))
+    
+    datetimes = np.arange(pd.Timestamp(earliest_time).replace(minute=0, second=0, nanosecond=0),
+                          pd.Timestamp(latest_time).replace(minute=0, second=0, nanosecond=0) + dt.timedelta(hours=1),
+                          dt.timedelta(hours=1)).astype(dt.datetime)
+    
+    ets = spice.datetime2et(datetimes)
+    
+    pos, lt = spice.spkpos('Juno', ets, 'Juno_JSS', 'None', 'Jupiter')
+    pos = pos.T / R_J
+    pos_df = pd.DataFrame({'x': pos[0], 'y': pos[1], 'z':pos[2]}, 
+                          index=datetimes)
+
+    pos_df['r'] = np.sqrt(np.sum(pos_df[['x', 'y']].to_numpy()**2, 1))
+
+    
+    spice.kclear()
+    
+    # sw_models = MMESH_reader.fromFile('/Users/mrutala/projects/JupiterBoundaries/mmesh_run/MMESH_atJupiter_20160301-20240301_withConstituentModels.csv')
+    # sw_mme = sw_models.xs('ensemble', axis='columns', level=0)
+    
+    with plt.style.context('/Users/mrutala/code/python/mjr_presentation.mplstyle'):
+        fig, axs = plt.subplots(ncols=2, sharey=True, sharex=True, 
+                                figsize=(8,6))
+        plt.subplots_adjust(left=0.125, bottom=0.15, right=0.975, top=0.7,
+                            wspace=0.075)
+        
+        
+        for ax, crossing_type in zip(axs, ['bs', 'mp']):
+            
+            y_joy = np.linspace(-500, 500, 10000)
+            
+            if crossing_type == 'bs':
+                crossing_data = bs_crossing_data
+                marker = 'x'
+                x_joy = JBC.find_JoyBowShock(0.1, y=y_joy, z=0)
+                color_joy, linestyle_joy = 'C0', 'solid'
+                
+            if crossing_type == 'mp':
+                crossing_data = mp_crossing_data
+                marker = 'o'
+                x_joy = JBC.find_JoyMagnetopause(0.1, y=y_joy, z=0)
+                color_joy, linestyle_joy = 'C4', '--'
+            
+            #fig, ax = plt.subplots(figsize=(8,8))
+            
+            ax.plot(pos_df['y'], pos_df['x'], 
+                    color='xkcd:light gray', linewidth=0.5, 
+                    zorder=1)
+            
+            ax.scatter(*pos_df.loc[crossing_data.index, ['y', 'x']].to_numpy().T,
+                       color = 'white', s = 6, 
+                       marker = marker, zorder=2)
+            
+            #   Plot years for reference
+            for year in [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]:
+                xy = pos_df.loc[pd.Timestamp(dt.datetime(year, 1, 1)), ['x', 'y']].to_list()
+                ang = np.arctan2(xy[0], xy[1])
+                
+                indx = ((pos_df.index > dt.datetime(year, 1, 1) - dt.timedelta(days = 40)) &
+                        (pos_df.index < dt.datetime(year, 1, 1) + dt.timedelta(days = 40)))
+                
+                max_r = np.max(pos_df.iloc[indx].loc[:, 'r']) + 20
+                
+                ax.annotate(year, (max_r*np.cos(ang), max_r*np.sin(ang)), (0,0), 
+                            xycoords = 'data', textcoords = 'offset fontsize', 
+                            rotation = (-90 - (ang * 180/np.pi + 360)),
+                            ha = 'center', va = 'center', annotation_clip=True,
+                            fontsize=12)
+                
+            #   Plot Joy bounds (optional)
+            if joy:
+                x_joy = JBC.find_JoyBoundaries(0.02, boundary = crossing_type.upper(), y=y_joy, z=0)
+                ax.plot(y_joy, x_joy[1], label = r'$p_{{dyn}} = {:.2f}$ nPa ($16^{{th}}$ %ile)'.format(0.03),
+                         color='C2', linewidth=1.5, linestyle=linestyle_joy)
+                
+                x_joy = JBC.find_JoyBoundaries(0.05, boundary = crossing_type.upper(), y=y_joy, z=0)
+                ax.plot(y_joy, x_joy[1], label = r'$p_{{dyn}} = {:.2f}$ nPa ($50^{{th}}$ %ile)'.format(0.08),
+                         color='C4', linewidth=1.5, linestyle=linestyle_joy)
+                
+                x_joy = JBC.find_JoyBoundaries(0.13, boundary = crossing_type.upper(), y=y_joy, z=0)
+                ax.plot(y_joy, x_joy[1], label = r'$p_{{dyn}} = {:.2f}$ nPa ($84^{{th}}$ %ile)'.format(0.13),
+                         color='C5', linewidth=1.5, linestyle=linestyle_joy)
+                
+                x_joy = JBC.find_JoyBoundaries(0.47, boundary = crossing_type.upper(), y=y_joy, z=0)
+                ax.plot(y_joy, x_joy[1], label = r'$p_{{dyn}} = {:.2f}$ nPa ($99^{{th}}$ %ile)'.format(0.47),
+                         color='C0', linewidth=1.5, linestyle=linestyle_joy)
+                
+                if crossing_type == 'bs': 
+                    ax.legend(loc='lower center', bbox_to_anchor=(1.05, 1.2), ncol=2)
+                
+            ax.set(xlim = [-150, 150], ylim = [150,-150],
+                   aspect = 1)
+            
+        axs[0].set(title='Bow Shock Crossings \n (n = 117)')
+        axs[1].set(title='Magnetopause Crossings \n (n = 454)')
+        
+        fig.supxlabel(r'$Y_{JSS}$ [$R_J$] (+ duskward)', x=0.55)
+        axs[0].set(ylabel = r'$X_{JSS}$ [$R_J$] (+ sunward)')
+        
+        plt.show()
+
 def plot_CrossingsAndTrajectories():
     import spiceypy as spice
     import numpy as np
@@ -289,7 +415,7 @@ def plot_CrossingsAndTrajectories():
         cb = plt.colorbar(cs, cax=ax2)
         #cb.ax.set_yticklabels([r'$10^{{{:.1f}}}$'.format(np.log10(num)) for num in cb.get_ticks()])
         cb.ax.set_yticklabels([r'{:.1f}'.format(np.log10(num)) for num in bounds])
-        ax2.set(ylabel=r'MME Solar Wind Pressure ($p_{dyn}$) [log(nPa)]')
+        ax2.set(ylabel=r'Solar Wind Pressure [log(nPa)]')
         
         plt.show()
     
