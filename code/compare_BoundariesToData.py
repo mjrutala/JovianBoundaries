@@ -29,7 +29,7 @@ import BoundaryModels as BM
 import JunoPreprocessingRoutines as JPR 
 
 plt.style.use('/Users/mrutala/code/python/mjr.mplstyle')
-#plt.style.use('/Users/mrutala/code/python/mjr_presentation.mplstyle')
+plt.style.use('/Users/mrutala/code/python/mjr_presentation.mplstyle')
 
 R_J = 71492.
 
