@@ -22,12 +22,13 @@ import JoyBoundaryCoords as JBC
 
 def _ready_DataFrames():
     starttime = datetime.datetime(2016, 5, 1)
-    stoptime = datetime.datetime(2017, 2, 1)
+    stoptime = datetime.datetime(2024, 2, 28)
     resolution = 10  #  'minutes'
     
-    bs_crossings = JPR.make_CombinedCrossingsList(boundary='bs', which='Louis')
+    bs_crossings = JPR.make_CombinedCrossingsList(boundary='bs', which=['Louis', 'Kurth'])
     mp_crossings = JPR.make_CombinedCrossingsList(boundary='mp', which='Louis')
     location_df = JPR.convert_DirectionToLocation(starttime, stoptime, bs_crossings, mp_crossings, resolution=resolution)
+    location_df = location_df.dropna(subset = ['in_sw', 'in_msh', 'in_msp'], axis = 'index', how = 'any')
     
     #   Drop location info to get coordinate_df
     coordinate_df = location_df.drop(['in_sw', 'in_msh', 'in_msp', 'location'], axis='columns')
@@ -115,8 +116,8 @@ def _compare_(location_df, model_location_df, boundary = 'bs'):
     ax.plot(location_df[column_name], color='black', 
             label = 'Juno')
     
-    ax.plot(model_location_df[column_name], linestyle='-', 
-            label = 'Forward Model')
+    ax.plot(model_location_df[column_name], linestyle='-', linewidth = 1.0,
+            label = 'Forward Model',)
     
     ax.legend(loc = 'lower center', bbox_to_anchor = [0.5, 1], ncols=2)
     
