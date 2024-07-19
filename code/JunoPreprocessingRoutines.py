@@ -207,62 +207,65 @@ def convert_DirectionToLocation(starttime, stoptime, bs_crossings, mp_crossings,
     combined_crossings = pd.concat([bs_crossings, mp_crossings], axis='index')
     interleaved_crossings = combined_crossings.sort_index()
     
-    for indx, row in interleaved_crossings.iterrows():
+    for this_indx, row in interleaved_crossings.iterrows():
+        
+        qry = 'index >= @last_indx & index < @this_indx'
+        
         if row['boundary'] == 'bow shock':
             if row['direction'] == 'in':
-                df.loc[last_indx:indx, 'in_sw'].iloc[:-1] = 1
-                df.loc[last_indx:indx, 'in_msh'].iloc[:-1] = 0
-                df.loc[last_indx:indx, 'in_msp'].iloc[:-1] = 0
+                df.loc[df.query(qry).index, 'in_sw'] = 1
+                df.loc[df.query(qry).index, 'in_msh'] = 0
+                df.loc[df.query(qry).index, 'in_msp'] = 0
             if row['direction'] == 'out':
-                df.loc[last_indx:indx, 'in_sw'].iloc[:-1] = 0
-                df.loc[last_indx:indx, 'in_msh'].iloc[:-1] = 1
-                df.loc[last_indx:indx, 'in_msp'].iloc[:-1] = 0
+                df.loc[df.query(qry).index, 'in_sw'] = 0
+                df.loc[df.query(qry).index, 'in_msh'] = 1
+                df.loc[df.query(qry).index, 'in_msp'] = 0
         if row['boundary'] == 'magnetopause':
             if row['direction'] == 'in':
-                df.loc[last_indx:indx, 'in_sw'].iloc[:-1] = 0
-                df.loc[last_indx:indx, 'in_msh'].iloc[:-1] = 1
-                df.loc[last_indx:indx, 'in_msp'].iloc[:-1] = 0
+                df.loc[df.query(qry).index, 'in_sw'] = 0
+                df.loc[df.query(qry).index, 'in_msh'] = 1
+                df.loc[df.query(qry).index, 'in_msp'] = 0
             if row['direction'] == 'out':
-                df.loc[last_indx:indx, 'in_sw'].iloc[:-1] = 0
-                df.loc[last_indx:indx, 'in_msh'].iloc[:-1] = 0
-                df.loc[last_indx:indx, 'in_msp'].iloc[:-1] = 1
+                df.loc[df.query(qry).index, 'in_sw'] = 0
+                df.loc[df.query(qry).index, 'in_msh'] = 0
+                df.loc[df.query(qry).index, 'in_msp']= 1
                 
-        last_indx = indx
+        last_indx = this_indx
         
     df['location'] = np.nan
     df.loc[df['in_sw'] == 1, 'location'] = 1
     df.loc[df['in_msh'] == 1, 'location'] = 2
     df.loc[df['in_msp'] == 1, 'location'] = 3
     
-    import matplotlib.pyplot as plt
-    fig, axs = plt.subplots(nrows=3, sharex=True)
-    axs[0].plot(df['in_sw'], color='C0')
-    axs[1].plot(df['in_msh'], color='C1')
-    axs[2].plot(df['in_msp'], color='C2')
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # fig, axs = plt.subplots(nrows=3, sharex=True)
+    # axs[0].plot(df['in_sw'], color='C0')
+    # axs[1].plot(df['in_msh'], color='C1')
+    # axs[2].plot(df['in_msp'], color='C2')
+    # plt.show()
     
-    fig, axd = plt.subplot_mosaic([['XY', 'ZY'],
-                                   ['XZ', '.']])
+    # fig, axd = plt.subplot_mosaic([['XY', 'ZY'],
+    #                                ['XZ', '.']])
     
-    axd['XY'].scatter(df['x'], df['y'],
-                      c = df['location'], s = 2)
+    # axd['XY'].scatter(df['x'], df['y'],
+    #                   c = df['location'], s = 2)
     
-    axd['XZ'].scatter(df['x'], df['z'],
-                      c = df['location'], s = 2)
+    # axd['XZ'].scatter(df['x'], df['z'],
+    #                   c = df['location'], s = 2)
     
-    axd['ZY'].scatter(df['z'], df['y'],
-                      c = df['location'], s = 2)
+    # axd['ZY'].scatter(df['z'], df['y'],
+    #                   c = df['location'], s = 2)
     
     
-    axd['XY'].set(xlim = (150, -150),
-                  ylim = (-150, 150))
-    axd['XZ'].set(xlim = (150, -150),
-                  ylim = (-150, 150))
-    axd['ZY'].set(xlim = (-150, 150),
-                  ylim = (-150, 150))
+    # axd['XY'].set(xlim = (150, -150),
+    #               ylim = (-150, 150))
+    # axd['XZ'].set(xlim = (150, -150),
+    #               ylim = (-150, 150))
+    # axd['ZY'].set(xlim = (-150, 150),
+    #               ylim = (-150, 150))
     
             
-    breakpoint()
+    return df
         
     
 
