@@ -229,8 +229,9 @@ def convert_DirectionToLocation(starttime, stoptime, bs_crossings, mp_crossings,
                 df.loc[df.query(qry).index, 'in_sw'] = 0
                 df.loc[df.query(qry).index, 'in_msh'] = 0
                 df.loc[df.query(qry).index, 'in_msp']= 1
-                
-        last_indx = this_indx
+        
+        if row['direction'] != 'partial':
+            last_indx = this_indx
         
     df['location'] = np.nan
     df.loc[df['in_sw'] == 1, 'location'] = 1
@@ -299,9 +300,10 @@ def read_Kurth_CrossingList(bs=True):
         return
     
     crossing_list_names = ['apojoves', 'date', 'direction', 'notes']
-    crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = 0)
+    crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = None)
     crossings.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for index, row in crossings.iterrows()]
     crossings = crossings.sort_index()
+    crossings['boundary'] = 'bow shock'
     crossings['origin'] = 'Kurth, p.c.'
     return crossings
 
@@ -312,10 +314,13 @@ def read_Ebert_CrossingList(mp=False, bs=True):
                                'r', 'x_JSO', 'y_JSO', 'z_JSO', 
                                'lat', 'mlat', 'lon', 'LT', 
                                'notes']
+        crossing_label = 'magnetopause'
     else:
         crossing_list = get_paths()['Ebert_bowshock']
         crossing_list_names = ['#', 'date', 'time',
                                'r', 'lat', 'mlat', 'MLT']
+        crossing_label = 'bow shock'
+        
     #   Read the correct list, and drop rows without events
     crossings = pd.read_csv(crossing_list, 
                             sep=',', names = crossing_list_names, header=0,
@@ -327,6 +332,7 @@ def read_Ebert_CrossingList(mp=False, bs=True):
     crossings = crossings.sort_index()
     
     #   Add the origin of these crossings to the df
+    crossings['boundary'] = crossing_label
     crossings['origin'] = 'Ebert (+ Montgomery), p.c.'
     
     return crossings
