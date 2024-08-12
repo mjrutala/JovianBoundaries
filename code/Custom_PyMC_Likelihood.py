@@ -21,8 +21,9 @@ from pytensor.graph import Apply, Op
 from scipy.optimize import approx_fprime
 
 import BoundaryForwardModeling as JP_BFM
+import BoundaryModels as BM
 
-def my_model(r0, r1, a0, a1, coords):
+def my_model(params, coords):
     """
     
 
@@ -51,37 +52,44 @@ def my_model(r0, r1, a0, a1, coords):
     result_df = JP_BFM.find_ModelOrbitIntersections(coordinate_df, 
                                                     boundary = 'bs',
                                                     model = model_info['model'], 
-                                                    params = [r0, r1, a0, a1])
+                                                    params = params)
     
     
     return result_df['within_bs'].to_numpy()
 
 
-def my_loglike(r0, r1, a0, a1, sigma, coords, data):
+def my_loglike(params, sigma, coords, data):
     # We fail explicitly if inputs are not numerical types for the sake of this tutorial
     # As defined, my_loglike would actually work fine with PyTensor variables!
     
     # for param in (m, c, sigma, x, data):
     #     if not isinstance(param, (float, np.ndarray)):
     #         raise TypeError(f"Invalid input type to loglike: {type(param)}")
-    model = my_model(r0, r1, a0, a1, coords)
+    
+    model = my_model(params, coords)
     return -0.5 * ((data - model) / sigma) ** 2 - np.log(np.sqrt(2 * np.pi)) - np.log(sigma)
 
 # define a pytensor Op for our likelihood function
 class LogLike(Op):
-    def make_node(self, r0, r1, a0, a1, sigma, coords, data) -> Apply:
+    def make_node(self, params, sigma, coords, data) -> Apply:
         # Convert inputs to tensor variables
-        r0 = pt.as_tensor(r0)
-        r1 = pt.as_tensor(r1)
-        a0 = pt.as_tensor(a0)
-        a1 = pt.as_tensor(a1)
+        param_list = []
+        for param in params:
+            param_list.append(pt.as_tensor(param))
+            
+        params = pt.as_tensor(params)
+        # r0 = pt.as_tensor(r0)
+        # r1 = pt.as_tensor(r1)
+        # a0 = pt.as_tensor(a0)
+        # a1 = pt.as_tensor(a1)
         #params = pt.as_tensor_variable(params)
         sigma = pt.as_tensor(sigma)
         # x = pt.as_tensor(x)
         coords = pt.as_tensor_variable(coords)
         data = pt.as_tensor(data)
 
-        inputs = [r0, r1, a0, a1, sigma, coords, data]
+        # params = pt.as_tensor([r0, r1, a0, a1])
+        inputs = [params, sigma, coords, data]
         # Define output type, in our case a vector of likelihoods
         # with the same dimensions and same data type as data
         # If data must always be a vector, we could have hard-coded
@@ -94,10 +102,11 @@ class LogLike(Op):
     def perform(self, node: Apply, inputs: list[np.ndarray], outputs: list[list[None]]) -> None:
         # This is the method that compute numerical output
         # given numerical inputs. Everything here is numpy arrays
-        r0, r1, a0, a1, sigma, coords, data = inputs  # this will contain my variables
+        params, sigma, coords, data = inputs  # this will contain my variables
 
         # call our numpy log-likelihood function
-        loglike_eval = my_loglike(r0, r1, a0, a1, sigma, coords, data)
+        #params = [r0, r1, a0, a1]
+        loglike_eval = my_loglike(params, sigma, coords, data)
 
         # Save the result in the outputs list provided by PyTensor
         # There is one list per output, each containing another list
@@ -115,9 +124,9 @@ data = location_df['within_bs'].to_numpy()
 # create our Op
 loglike_op = LogLike()
 
-def custom_dist_loglike(data, r0, r1, a0, a1, sigma, coords):
+def custom_dist_loglike(data, params, sigma, coords):
     # data, or observed is always passed as the first input of CustomDist
-    return loglike_op(r0, r1, a0, a1, sigma, coords, data)
+    return loglike_op(params, sigma, coords, data)
 
 # # use PyMC to sampler from log-likelihood
 # with pm.Model() as no_grad_model:
@@ -152,11 +161,12 @@ with pm.Model() as potential_model:
     a1 = pm.Uniform("a1", lower=-10.0, upper=10.0)
     
     #theta = pt.as_tensor([m,c])
+    params = [r0, r1, a0, a1]
 
     # use a Potential instead of a CustomDist
-    pm.Potential("likelihood", custom_dist_loglike(data, r0, r1, a0, a1, sigma, coords.T))
+    pm.Potential("likelihood", custom_dist_loglike(data, params, sigma, coords.T))
 
-    idata_potential = pm.sample(tune=500, draws=1000, chains=10)
+    idata_potential = pm.sample(tune=500, draws=1000, chains=2)
 
 # plot the traces
 az.plot_trace(idata_potential);
@@ -164,3 +174,49 @@ az.plot_trace(idata_potential);
 figure = corner.corner(idata_potential, 
                        quantiles=[0.16, 0.5, 0.84],
                        show_titles=True,)
+
+#   Sample a subset of all the MCMC models to calculate the MAE between the data and the model
+#   This is used to compare different models to one another
+stack = az.extract(idata_potential, num_samples=100)
+
+fig, ax = plt.subplots()
+
+model_info = JP_BFM.boundary_model_init('Shuelike')
+# r, t, p, p_dyn = coords.T
+# coordinate_df = pd.DataFrame({'r': r, 
+#                               't': t,
+#                               'p': p,
+#                               'p_dyn': p_dyn})
+
+mad_list = []   
+for i in range(100):
+    
+    a0, a1, r0, r1 = stack.a0.values[i], stack.a1.values[i], stack.r0.values[i], stack.r1.values[i]
+    
+    result_df = JP_BFM.find_ModelOrbitIntersections(coordinate_df, 
+                                                    boundary = 'bs',
+                                                    model = model_info['model'], 
+                                                    params = [r0, r1, a0, a1])
+    ax.plot(coordinate_df.index, result_df['within_bs'], color='black', alpha=0.01, zorder=2)
+    
+    mad_list.append(np.mean(np.abs(location_df['within_bs'] - result_df['within_bs'])))
+    
+ax.plot(location_df.index, location_df['within_bs'], color='C0', zorder=0)
+    
+    
+# coordinate_df = pd.DataFrame({'t': np.linspace(0, (3/4)*np.pi, 1000),
+#                               'p': np.zeros(1000) + (1/2)*np.pi,
+#                               'p_dyn': np.zeros(1000) + 0.05})
+# for i in range(100):
+    
+#     a0, a1, r0, r1 = stack.a0.values[i], stack.a1.values[i], stack.r0.values[i], stack.r1.values[i]
+    
+    
+#     model_r = model_info['model'](parameters = (a0, a1, r0, r1), coordinates=coordinate_df.to_numpy().T)
+    
+#     model_x, model_y, model_z = BM.convert_SphericalSolarToCartesian(model_r, coordinate_df['t'], coordinate_df['p'])
+        
+#     ax.plot(model_x, model_y, alpha=0.01)
+    
+    
+# ax.set(xlim = (-200,200), ylim=(-200,200))
