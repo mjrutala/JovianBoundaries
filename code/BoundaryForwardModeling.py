@@ -33,7 +33,7 @@ def _ready_DataFrames(starttime, stoptime, resolution=1):
     mp_crossings = JPR.make_CombinedCrossingsList(boundary='mp', which='Louis')
     location_df = JPR.convert_DirectionToLocation(starttime, stoptime, bs_crossings, mp_crossings, resolution=resolution)
     location_df = location_df.dropna(subset = ['in_sw', 'in_msh', 'in_msp'], axis = 'index', how = 'any')
-    
+   
     #   Drop location info to get coordinate_df
     coordinate_df = location_df.drop(['in_sw', 'in_msh', 'in_msp', 'location'], axis='columns')
     
@@ -68,8 +68,27 @@ def _ready_DataFrames(starttime, stoptime, resolution=1):
     
     return location_df, coordinate_df
 
+def find_ModelOrbitIntersections(coordinate_df, boundary = 'bs',
+                                 model = None, params = None):
+    #   Get the string names of variables expected by the model
+    input_var_names, output_var_name = model(variables = True)
+    
+    #   In spherical coordinates: get boundary 'r' position from 't, p'    
+    if output_var_name == 'r':
+        model_r = model(parameters = params, coordinates = coordinate_df.loc[:, input_var_names].to_numpy().T)
+    
+    else:
+        breakpoint()
+        
+    within_boundary = (model_r >= coordinate_df['r'].to_numpy()).astype(int)
+    
+    location_df = pd.DataFrame(index = coordinate_df.index)
+    location_df['within_' + boundary] = within_boundary
 
-def find_ModelOrbitIntersections(coordinate_df, boundary = 'bs', 
+    return location_df
+    
+
+def _find_ModelOrbitIntersections(coordinate_df, boundary = 'bs', 
                                  model = None, params = None, 
                                  sigma=10, n=1e3,
                                  disable_tqdm = False):
