@@ -264,7 +264,6 @@ def convert_DirectionToLocation(starttime, stoptime, bs_crossings, mp_crossings,
     #               ylim = (-150, 150))
     # axd['ZY'].set(xlim = (-150, 150),
     #               ylim = (-150, 150))
-    
             
     return df
         
