@@ -67,7 +67,22 @@ def my_loglike(params, sigma, coords, data):
     #         raise TypeError(f"Invalid input type to loglike: {type(param)}")
     
     model = my_model(params, coords)
-    return -0.5 * ((data - model) / sigma) ** 2 - np.log(np.sqrt(2 * np.pi)) - np.log(sigma)
+    #return -0.5 * ((data - model) / sigma) ** 2 - np.log(np.sqrt(2 * np.pi)) - np.log(sigma)
+    # return -(0.5 / sigma**2) * ((data - model) ** 2)
+
+    mask0 = data == 0
+    
+    #   Weights for the residuals: higher where there are fewer points
+    weight_value = len(data[mask0]) / len(data)
+    weight_value = 1/10
+    
+    weights = np.zeros(len(data))
+    weights[mask0] = 1 - weight_value
+    weights[~mask0] = weight_value
+    
+    residuals = (data - model) * weights
+    
+    return -(0.5 / sigma**2) * ((residuals) ** 2)
 
 # define a pytensor Op for our likelihood function
 class LogLike(Op):
@@ -114,7 +129,7 @@ class LogLike(Op):
         outputs[0][0] = np.asarray(loglike_eval)
 
 #   Data
-location_df, coordinate_df = JP_BFM._ready_DataFrames(dt.datetime(2016, 6, 1), dt.datetime(2023, 6, 1), resolution=10)
+location_df, coordinate_df = JP_BFM._ready_DataFrames(dt.datetime(2016, 6, 1), dt.datetime(2020, 6, 1), resolution=10)
 
 
 coords = coordinate_df.loc[:, ['r', 't', 'p', 'p_dyn']].to_numpy()
@@ -155,18 +170,23 @@ def custom_dist_loglike(data, params, sigma, coords):
 
 with pm.Model() as potential_model:
     # uniform priors on m and c
-    r0 = pm.Uniform("r0", lower=0.0, upper=100.0)
-    r1 = pm.Uniform("r1", lower=-0.5, upper=0.25)
-    a0 = pm.Uniform("a0", lower=0.0, upper=5.0)
-    a1 = pm.Uniform("a1", lower=-10.0, upper=10.0)
+    # r0 = pm.Uniform("r0", lower=0.0, upper=100.0)
+    #r1 = pm.Uniform("r1", lower=-0.5, upper=0.25)
+    # a0 = pm.Uniform("a0", lower=0.0, upper=5.0)
+    # a1 = pm.Uniform("a1", lower=-10.0, upper=10.0)
+    r0 = pm.InverseGamma("r0", mu=60, sigma=30)
+    r1 = pm.Normal("r1", mu=-0.2, sigma=0.1)
+    a0 = pm.InverseGamma("a0", mu=2.0, sigma=10.0)
+    a1 = pm.Normal("a1", mu=0, sigma=0.5)
     
+    #constraint = pm.Deterministic('constrant', a0 > -a1)
     #theta = pt.as_tensor([m,c])
     params = [r0, r1, a0, a1]
 
     # use a Potential instead of a CustomDist
     pm.Potential("likelihood", custom_dist_loglike(data, params, sigma, coords.T))
 
-    idata_potential = pm.sample(tune=500, draws=1000, chains=2)
+    idata_potential = pm.sample(tune=2000, draws=2000, chains=4)
 
 # plot the traces
 az.plot_trace(idata_potential);
@@ -188,7 +208,8 @@ model_info = JP_BFM.boundary_model_init('Shuelike')
 #                               'p': p,
 #                               'p_dyn': p_dyn})
 
-mad_list = []   
+all_models = []
+mad_list = []
 for i in range(100):
     
     a0, a1, r0, r1 = stack.a0.values[i], stack.a1.values[i], stack.r0.values[i], stack.r1.values[i]
@@ -197,26 +218,48 @@ for i in range(100):
                                                     boundary = 'bs',
                                                     model = model_info['model'], 
                                                     params = [r0, r1, a0, a1])
-    ax.plot(coordinate_df.index, result_df['within_bs'], color='black', alpha=0.01, zorder=2)
-    
+    #ax.plot(coordinate_df.index, result_df['within_bs'], color='black', alpha=0.01, zorder=2)
+    all_models.append(result_df['within_bs'].to_numpy())
     mad_list.append(np.mean(np.abs(location_df['within_bs'] - result_df['within_bs'])))
     
-ax.plot(location_df.index, location_df['within_bs'], color='C0', zorder=0)
+ax.plot(location_df.index, np.mean(all_models, 0), color='black', linewidth=1)
+ax.plot(location_df.index, location_df['within_bs'], color='C0', linewidth=1, zorder=0)
+    
+
+fig, ax = plt.subplots()
+
+model_coords = pd.DataFrame({'t': np.linspace((-3/4)*np.pi, (3/4)*np.pi, 1000),
+                             'p': np.zeros(1000) + (1/2)*np.pi,
+                             'p_dyn': np.zeros(1000) + 0.05})
+for i in range(100):
+    
+    a0, a1, r0, r1 = stack.a0.values[i], stack.a1.values[i], stack.r0.values[i], stack.r1.values[i]
     
     
-# coordinate_df = pd.DataFrame({'t': np.linspace(0, (3/4)*np.pi, 1000),
-#                               'p': np.zeros(1000) + (1/2)*np.pi,
-#                               'p_dyn': np.zeros(1000) + 0.05})
-# for i in range(100):
+    model_coords['r'] = model_info['model'](parameters = (r0, r1, a0, a1), coordinates=model_coords.to_numpy().T)
     
-#     a0, a1, r0, r1 = stack.a0.values[i], stack.a1.values[i], stack.r0.values[i], stack.r1.values[i]
-    
-    
-#     model_r = model_info['model'](parameters = (a0, a1, r0, r1), coordinates=coordinate_df.to_numpy().T)
-    
-#     model_x, model_y, model_z = BM.convert_SphericalSolarToCartesian(model_r, coordinate_df['t'], coordinate_df['p'])
+    model_x, model_y, model_z = BM.convert_SphericalSolarToCartesian(*model_coords[['r', 't', 'p']].to_numpy().T)
         
-#     ax.plot(model_x, model_y, alpha=0.01)
+    # model_x = model_coords['r'] * np.cos(model_coords['t'])
+    # model_y = model_coords['r'] * np.sin(model_coords['t'])
+    ax.plot(model_x, model_y, alpha=0.05, color='black')
     
-    
-# ax.set(xlim = (-200,200), ylim=(-200,200))
+    model_coords = model_coords.drop('r', axis = 'columns')
+
+#   params as a list in the correct order
+params = [stack.mean()[e].values for e in stack.mean()[['r0', 'r1', 'a0', 'a1']]]
+model_coords['r'] = model_info['model'](parameters = params, coordinates = model_coords.to_numpy().T)
+model_x, model_y, model_z = BM.convert_SphericalSolarToCartesian(*model_coords[['r', 't', 'p']].to_numpy().T)
+ax.plot(model_x, model_y, color='C0', label='Mean')
+model_coords = model_coords.drop('r', axis='columns')
+
+#   params as a list in the correct order
+params = [stack.median()[e].values for e in stack.median()[['r0', 'r1', 'a0', 'a1']]]
+model_coords['r'] = model_info['model'](parameters = params, coordinates = model_coords.to_numpy().T)
+model_x, model_y, model_z = BM.convert_SphericalSolarToCartesian(*model_coords[['r', 't', 'p']].to_numpy().T)
+ax.plot(model_x, model_y, color='C1', label='Median')    
+model_coords = model_coords.drop('r', axis='columns')
+
+ax.legend()
+
+ax.set(xlim = (-200,200), ylim=(-200,200))
