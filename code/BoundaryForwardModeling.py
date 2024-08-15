@@ -69,7 +69,7 @@ def _ready_DataFrames(starttime, stoptime, resolution=1):
     return location_df, coordinate_df
 
 def find_ModelOrbitIntersections(coordinate_df, boundary = 'bs',
-                                 model = None, params = None):
+                                 model = None, params = None, as_numpy = False):
     #   Get the string names of variables expected by the model
     input_var_names, output_var_name = model(variables = True)
     
@@ -153,31 +153,7 @@ def _compare_(location_df, model_location_df=None, boundary='bs'):
     
     plt.show()
   
-    
-def boundary_model_init(model_name):
-    #   Select boundary model
-    bm = {'Shuelike_Static': {'model': BM.Shuelike_Static,
-                              'param_dict': {'r0': [30, 40, 50, 60, 70, 80, 90, 100],
-                                             'a0': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]}
-                              },
-          'Shuelike': {'model': BM.Shuelike, 
-                       'param_dict': {'r0': [30, 40, 50, 60, 70, 80],
-                                      'r1': [-0.1, -0.2, -0.3, -0.4],
-                                      'a0': [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-                                      'a1': [0.01, 0.1, 1.0, 10.0]}
-                       },
-          'Shuelike_A1': {'model': BM.Shuelike_AsymmetryCase1,
-                          'param_dict': {'r0': [30, 40, 50],
-                                         'r1': [-0.10, -0.20, -0.30],
-                                         'r2': [1, 5, 10],
-                                         'r3': [1, 5, 10],
-                                         'r4': [1.0, 2.0, 3.0],
-                                         'a0': [0.3, 0.5, 0.7],
-                                         'a1': [0.1, 0.3, 0.5]}
-                          }
-          }
-    return bm[model_name]
-          
+
 def loop_over_grid(starttime, stoptime, resolution = 1, model_name = 'Shuelike'):
     
     location_df, coordinate_df = _ready_DataFrames(starttime, stoptime, resolution=resolution)
