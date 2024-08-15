@@ -6,6 +6,7 @@ Created on Tue Apr 23 12:36:53 2024
 @author: mrutala
 """
 import numpy as np
+import pymc as pm
 
 # =============================================================================
 # Section 1: Define a useful coordinate system for the boundaries
@@ -71,6 +72,52 @@ def convert_SphericalSolarToCylindricalSolar(r, t, p):
     ell = r * np.cos(t)
     
     return np.array([rho, phi, ell])
+
+
+# =============================================================================
+# Model lookup and initialization utilities
+# =============================================================================
+def lookup(model_number):
+    bm = {'001': 'Shuelike'}
+    
+    return bm['{:03d}'.format(model_number)]
+
+def init(model_name):
+    #   Select boundary model
+    bm = {'Shuelike_Static': {'model': Shuelike_Static,
+                              'param_dict': {'r0': [30, 40, 50, 60, 70, 80, 90, 100],
+                                             'a0': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]}
+                              },
+          'Shuelike': 
+              {'model': Shuelike, 
+               'param_dict': {
+                   'r0': [30, 40, 50, 60, 70, 80],
+                   'r1': [-0.1, -0.2, -0.3, -0.4],
+                   'a0': [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+                   'a1': [0.01, 0.1, 1.0, 10.0]},
+               'param_distributions': {
+                   'r0': pm.InverseGamma,
+                   'r1': pm.Normal,
+                   'a0': pm.InverseGamma,
+                   'a1': pm.Normal},
+               'param_descriptions': {
+                   'r0': {'mu': 60, 'sigma': 30},
+                   'r1': {'mu': -0.2, 'sigma': 0.05},
+                   'a0': {'mu': 2.0, 'sigma': 10},
+                   'a1': {'mu': 0, 'sigma': 0.1}}
+               },
+          'Shuelike_A1': {'model': Shuelike_AsymmetryCase1,
+                          'param_dict': {'r0': [30, 40, 50],
+                                         'r1': [-0.10, -0.20, -0.30],
+                                         'r2': [1, 5, 10],
+                                         'r3': [1, 5, 10],
+                                         'r4': [1.0, 2.0, 3.0],
+                                         'a0': [0.3, 0.5, 0.7],
+                                         'a1': [0.1, 0.3, 0.5]}
+                          }
+          }
+    return bm[model_name]
+          
 
 # =============================================================================
 # Section 1.5: 3D Functional Forms for the boundaries
