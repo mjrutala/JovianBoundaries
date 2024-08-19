@@ -29,11 +29,11 @@ def _ready_DataFrames(starttime, stoptime, resolution=1):
     #resolution = 10  #  'minutes'
     
     #bs_crossings = JPR.make_CombinedCrossingsList(boundary='bs', which=['Louis', 'Kurth'])
-    bs_crossings = JPR.make_CombinedCrossingsList(boundary='bs', which=['Louis', 'Kurth', 'Ebert'])
+    bs_crossings = JPR.make_CombinedCrossingsList(boundary='bs', which=['Louis', 'Kurth'])#, 'Ebert'])
     mp_crossings = JPR.make_CombinedCrossingsList(boundary='mp', which='Louis')
     location_df = JPR.convert_DirectionToLocation(starttime, stoptime, bs_crossings, mp_crossings, resolution=resolution)
     location_df = location_df.dropna(subset = ['in_sw', 'in_msh', 'in_msp'], axis = 'index', how = 'any')
-   
+    
     #   Drop location info to get coordinate_df
     coordinate_df = location_df.drop(['in_sw', 'in_msh', 'in_msp', 'location'], axis='columns')
     
