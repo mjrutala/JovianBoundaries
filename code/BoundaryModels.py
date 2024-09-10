@@ -86,11 +86,7 @@ def lookup(model_number):
 
 def init(model_name):
     #   Select boundary model
-    bm = {'Shuelike_Static': {'model': Shuelike_Static,
-                              'param_dict': {'r0': [30, 40, 50, 60, 70, 80, 90, 100],
-                                             'a0': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]}
-                              },
-          'Shuelike': 
+    bm = {'Shuelike': 
               {'model': Shuelike, 
                'model_number': 1,
                'param_dict': {
@@ -106,8 +102,10 @@ def init(model_name):
                'param_descriptions': {
                    'r0': {'mu': 60, 'sigma': 30},
                    'r1': {'mu': -0.2, 'sigma': 0.05},
-                   'a0': {'mu': 1.0, 'sigma': 0.5},
-                   'a1': {'lower': "-1 * param_dict['a0']", 'upper': "2", 'EVAL_NEEDED':True}}
+                   'a0': {'mu': 1, 'sigma': 0.5},
+                   # 'a1': {'lower': "-1 * param_dict['a0']/p_dyn", 'upper': "2", 'EVAL_NEEDED':True}}
+                   # 'a1': {'lower': "-1 * param_dict['a0']", 'upper': "1", 'EVAL_NEEDED':True}}
+                   'a1': {'lower': "-10", 'upper': "10", 'EVAL_NEEDED':True}}
                },
           'Shuelike_Asymmetric':
               {'model': Shuelike_Asymmetric, 
@@ -123,14 +121,14 @@ def init(model_name):
                    'r2': pm.Normal,
                    'r3': pm.Normal,
                    'a0': pm.InverseGamma,
-                   'a1': pm.Normal},
+                   'a1': pm.Uniform},
                'param_descriptions': {
                    'r0': {'mu': 60, 'sigma': 30},
                    'r1': {'mu': -0.2, 'sigma': 0.05},
                    'r2': {'mu': -5, 'sigma': 5},
                    'r3': {'mu': 0, 'sigma':10},
                    'a0': {'mu': 1.0, 'sigma': 0.5},
-                   'a1': {'mu': 0, 'sigma': 0.1}}
+                   'a1': {'lower': "-1 * param_dict['a0']", 'upper': "2", 'EVAL_NEEDED':True}}
                },
           'Shuelike_AsymmetricAlpha':
               {'model': Shuelike_AsymmetricAlpha, 
