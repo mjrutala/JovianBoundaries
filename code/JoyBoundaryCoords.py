@@ -50,8 +50,8 @@ def find_JoyBoundaries(p_dyn, boundary='BS', x=False, y=False, z=False):
     import numpy as np
     import warnings
     
-    def fxn():
-        warnings.warn("runtime", RuntimeWarning)
+    # def fxn():
+    #     warnings.warn("runtime", RuntimeWarning)
         
     #   Joy+ 2002 coefficients
     A, B, C, D, E, F = get_JoyCoefficients(p_dyn, boundary=boundary).values()
@@ -93,8 +93,7 @@ def find_JoyBoundaries(p_dyn, boundary='BS', x=False, y=False, z=False):
             cq = A + D*ys + E*ys**2 - zs**2
     
     #   Ignore math warnings
-    with warnings.catch_warnings(action="ignore"):
-        fxn()
+    with np.errstate(invalid='ignore'):
         
         result_plus = (-bq + np.sqrt(bq**2 - 4*aq*cq))/(2*aq)
         result_minus = (-bq - np.sqrt(bq**2 - 4*aq*cq))/(2*aq)
