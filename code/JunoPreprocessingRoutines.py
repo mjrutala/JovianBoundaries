@@ -24,7 +24,8 @@ def get_paths():
                                'Louis2023_bowshock': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_BS.csv',
                                'Kurth_bowshock': paths_dict['data'] / 'Kurth_Waves/Kurth_BowShocks_formatted.csv',
                                'Ebert_magnetopause': paths_dict['data'] / 'Ebert_JADE/Magnetopause_Crossings_Ebert2024_v5.csv',
-                               'Ebert_bowshock': paths_dict['data'] / 'Ebert_JADE/Bowshock_Crossings_Ebert2024.csv'}
+                               'Ebert_bowshock': paths_dict['data'] / 'Ebert_JADE/Bowshock_Crossings_Ebert2024.csv',
+                               'Achilleos2004_bowshock': paths_dict['data']/'Achilleos2004/BowShock_Crossings_Achilleos2004.csv'}
     
     return paths_dict
     
@@ -45,6 +46,9 @@ def make_CombinedCrossingsList(boundary = 'BS', which = ['Louis', 'Kurth', 'Eber
             
             if 'Ebert' in which:
                 crossing_data.append(read_Ebert_CrossingList(bs=True))
+                
+            if 'Achilleos' in which:
+                crossing_data.append(read_Achilleos2004_CrossingList(bs=True))
             
             crossings_df = pd.concat(crossing_data, axis=0, join="outer")
         case ('mp' | 'magnetopause'):
@@ -334,6 +338,21 @@ def read_Ebert_CrossingList(mp=False, bs=True):
     crossings['boundary'] = crossing_label
     crossings['origin'] = 'Ebert (+ Montgomery), p.c.'
     
+    return crossings
+
+def read_Achilleos2004_CrossingList(bs=True):
+    if bs == True:
+        crossing_list = get_paths()['Achilleos2004_bowshock']
+    else:
+        print("No magnetopause crossings available from this function!")
+        return
+    
+    crossing_list_names = ['year', 'DoY', 'time', 'boundary', 'direction']
+    crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = 0)
+    crossings.index = [dt.datetime.strptime('{}-{}T{}'.format(row['year'], row['DoY'], row['time']), '%Y-%jT%H:%M') for index, row in crossings.iterrows()]
+    crossings = crossings.sort_index()
+    crossings['boundary'] = 'bow shock'
+    crossings['origin'] = 'Achilleos+ (2004)'
     return crossings
 
 def plot_CrossingsAndTrajectories_XYPlane(joy=False, mme=False):
