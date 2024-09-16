@@ -111,8 +111,10 @@ def find_BoundsForBowShock(location_df, coordinate_df):
         
     return lower_bound_params, upper_bound_params
     
-lower_bound_params, upper_bound_params = find_BoundsForBowShock(location_df, coordinate_df)
+lower_fit_params, upper_fit_params = find_BoundsForBowShock(location_df, coordinate_df)
 
+lower_bound_params = (lower_fit_params[0]*0.8, *lower_fit_params[1:])
+upper_bound_params = (upper_fit_params[0]*1.2, *upper_fit_params[1:])
 
 coords = coordinate_df.loc[:, ['r', 't', 'p', 'p_dyn']].to_numpy()
 r, t, p, p_dyn_loc = coords.T
@@ -120,7 +122,80 @@ r, t, p, p_dyn_loc = coords.T
 #   Think about what this is!
 sigma = 1
 
-#
+    
+#   Show the range of possible boundary surface locations
+fig, ax = plt.subplots()
+
+#   Dummy coords for plotting
+t_fc = np.linspace(0, 0.9*np.pi, 1000)
+p_fc = np.zeros(1000) + np.pi/2
+p_dyn_fc = np.zeros(1000)
+
+#   radial distance at lower fit, lower bound, upper fit, and upper bound
+r_lower_fit = model_dict['model'](lower_fit_params, (t_fc, p_fc, p_dyn_fc))
+rpl_lower_fit = BM.convert_SphericalSolarToCylindricalSolar(r_lower_fit, t_fc, p_fc)
+
+r_lower_bound = model_dict['model'](lower_bound_params, (t_fc, p_fc, p_dyn_fc))
+rpl_lower_bound = BM.convert_SphericalSolarToCylindricalSolar(r_lower_bound, t_fc, p_fc)
+
+r_upper_fit = model_dict['model'](upper_fit_params, (t_fc, p_fc, p_dyn_fc))
+rpl_upper_fit = BM.convert_SphericalSolarToCylindricalSolar(r_upper_fit, t_fc, p_fc)
+
+r_upper_bound = model_dict['model'](upper_bound_params, (t_fc, p_fc, p_dyn_fc))
+rpl_upper_bound = BM.convert_SphericalSolarToCylindricalSolar(r_upper_bound, t_fc, p_fc)
+
+#   Plot the fit boundaries
+ax.plot(rpl_upper_fit[2], rpl_upper_fit[0],
+        color = 'black', linestyle = (0, (3, 1, 1, 1)),
+        label = r'Inclusive Fit: ${:.2f} \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{}}}$'.format(upper_bound_params[0], upper_bound_params[2]))
+ax.plot(rpl_lower_fit[2], rpl_lower_fit[0],
+        color = 'black', linestyle = (0, (3, 1, 1, 1, 1, 1)),
+        label = r'Exclusive Fit: ${:.2f} \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{}}}$'.format(lower_bound_params[0], lower_bound_params[2]))
+
+#   Shade the bound region
+ax.fill(np.append(rpl_upper_bound[2], rpl_lower_bound[2][::-1]), 
+        np.append(rpl_upper_bound[0], rpl_lower_bound[0][::-1]),
+        color = 'black', alpha = 0.2, edgecolor = None,
+        label = 'Considered Range of Possible \nBow Shock Surfaces')
+ax.plot(np.append(rpl_upper_bound[2], np.flip(rpl_lower_bound[2])),
+        np.append(rpl_upper_bound[0], np.flip(rpl_lower_bound[0])),
+        color = 'xkcd:black', alpha=0.5, linestyle = '-',
+        label = r'$\pm20\%$ around fits')
+
+#   Plot locations of solar wind measurements
+in_sw_indx = location_df.query('in_sw == 1').index
+ax.scatter(coordinate_df.loc[in_sw_indx, 'ell'], 
+           coordinate_df.loc[in_sw_indx, 'rho'],
+           label = 'Spacecraft in the Solar Wind',
+           s = 2, color='C0', marker='o',
+           zorder = 10)
+
+x_joy = np.linspace(-150, 150, 10000)
+ps_dyn_joy = [0.375]
+for p_dyn_joy in ps_dyn_joy:
+    #   N-S boundary
+    z_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, y = 0)
+    ax.plot(x_joy, np.abs(z_joy[0]), color = 'C1', linestyle='--', lw=1.5,
+            label = r'N-S reference (Joy+ 2002)' ,zorder=8)
+    
+    y_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, z = 0)
+    ax.plot(x_joy, np.abs(y_joy[0]), color = 'C3', linestyle='--',
+            label = r'Dusk reference (Joy+ 2002)', zorder=8)
+    ax.plot(x_joy, y_joy[1], color = 'C5', linestyle='--',
+            label = r'Dawn reference (Joy+ 2002)', zorder=8)
+    
+
+ax.set(xlim = (150, -150), xlabel = r'$x_{JSS}$ [$R_J$] (+ toward Sun)',
+       ylim = (0, 200), ylabel = r'$\rho_{JSS} = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]',
+       aspect = 1)
+
+ax.legend(scatterpoints=3, handlelength=3)
+plt.show()
+
+
+# =============================================================================
+# Converting the boundaries to time series
+# =============================================================================
 inorout_arr = location_df['within_bs'].to_numpy()
 
 r_surface_mu, r_surface_sigma, r_surface_lower, r_surface_upper = [], [], [], []
@@ -128,13 +203,13 @@ for inorout, r_sc, t_sc, p_sc in zip(inorout_arr, r, t, p):
     if inorout == 0:
         # r_surface_mu.append(60)
         # r_surface_sigma.append(30)
-        r_surface_lower.append(model_dict['model'](lower_bound_params, (t_sc, p_sc, 0.03)))
+        r_surface_lower.append(BM.Shuelike(lower_bound_params, (t_sc, p_sc, 0.00)))
         r_surface_upper.append(r_sc)
     else:
         # r_surface_mu.append(60)
         # r_surface_sigma.append(30)
         r_surface_lower.append(r_sc)
-        r_surface_upper.append(model_dict['model'](upper_bound_params, (t_sc, p_sc, 0.03)))
+        r_surface_upper.append(BM.Shuelike(upper_bound_params, (t_sc, p_sc, 0.00)))
         
 r_surface_mu = np.array(r_surface_mu)
 r_surface_sigma = np.array(r_surface_sigma)
@@ -145,62 +220,34 @@ diff_test = [u - l for u, l in zip(r_surface_upper, r_surface_lower)]
 if (np.array(diff_test) < 0).any():
     print('Something went wrong!')
     breakpoint()
-    
-#   Show the range of possible boundary surface locations
+
+#   Visualize
 fig, ax = plt.subplots()
-in_sw_indx = location_df.query('in_sw == 1').index
-ax.scatter(coordinate_df.loc[in_sw_indx, 'ell'], 
-           coordinate_df.loc[in_sw_indx, 'rho'],
-           label = 'Solar Wind',
-           s = 2, color='C0', marker='o')
 
-# in_msh_indx = location_df.query('in_msh == 1').index
-# ax.scatter(coordinate_df.loc[in_msh_indx, 'ell'],
-#            coordinate_df.loc[in_msh_indx, 'rho'],
-#            label = 'Magnetosheath',
-#            s = 2, color='C4', marker='o')
+ax.fill_between(location_df.index, 
+                r_surface_upper, r_surface_lower,
+                color='black', alpha=0.2, edgecolor=None,
+                label = 'Considered Range of Possible \nBow Shock Surfaces')
+ax.plot(np.append(location_df.index, np.flip(location_df.index)),
+        np.append(r_surface_upper, np.flip(r_surface_lower)),
+        color = 'xkcd:black', alpha=0.5, linestyle = '-', lw=0.5,
+        label = r'$\pm20\%$ around fits')
 
-t_fc = np.linspace(0, 0.9*np.pi, 1000)
-p_fc = np.zeros(1000) + np.pi/2
-p_dyn_fc = np.zeros(1000)
-r_fc_upper = model_dict['model'](upper_bound_params, (t_fc, p_fc, p_dyn_fc))
-r_fc_lower = model_dict['model'](lower_bound_params, (t_fc, p_fc, p_dyn_fc))
-rpl_upper = BM.convert_SphericalSolarToCylindricalSolar(r_fc_upper, t_fc, p_fc)
-rpl_lower = BM.convert_SphericalSolarToCylindricalSolar(r_fc_lower, t_fc, p_fc)
+ax.plot(coordinate_df.index, coordinate_df['r'],
+        color='C4', linestyle='--', lw=1,
+        label = 'Spacecraft Position', zorder=8)
 
-ax.plot(rpl_upper[2], rpl_upper[0],
-        color = 'xkcd:gray', linestyle = '--',
-        label = '$r_b$ = {}, $f_b$ = {}'.format(upper_bound_params[0], upper_bound_params[2]))
-ax.plot(rpl_lower[2], rpl_lower[0],
-        color = 'xkcd:gray', linestyle = '--',
-        label = '$r_b$ = {}, $f_b$ = {}'.format(lower_bound_params[0], lower_bound_params[2]))
-ax.fill(np.append(rpl_upper[2], rpl_lower[2][::-1]), np.append(rpl_upper[0], rpl_lower[0][::-1]),
-        color = 'black', alpha = 0.25, edgecolor = None,
-        label = 'Range of Possible \nBow Shock Surfaces')
-
-x_joy = np.linspace(-150, 150, 10000)
-ps_dyn_joy = [0.075, 0.375]
-colors_joy = ['C2', 'C3']
-for p_dyn_joy, color_joy in zip(ps_dyn_joy, colors_joy):
-    z_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, y = 0)
-    ax.plot(x_joy, np.abs(z_joy[0]), color = color_joy, linestyle='--',
-            label = r'Joy, $p_{{dyn}} = {} nPa, \phi = {}^\circ$'.format(p_dyn_joy, 0))
-    
-    y_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, z = 0)
-    ax.plot(x_joy, np.abs(y_joy[0]), color = color_joy, linestyle='-.',
-            label = r'Joy, $p_{{dyn}} = {} nPa, \phi = {}^\circ$'.format(p_dyn_joy, 270))
-    ax.plot(x_joy, y_joy[1], color = color_joy, linestyle=':',
-            label = r'Joy, $p_{{dyn}} = {} nPa, \phi = {}^\circ$'.format(p_dyn_joy, 90))
-    
-
-ax.set(xlim = (150, -150), xlabel = r'$x_{JSS}$ [$R_J$] (+ toward Sun)',
-       ylim = (0, 200), ylabel = r'$\rho_{JSS} = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]',
-       aspect = 1)
+ax.scatter(location_df.query('within_bs == 0').index,
+           coordinate_df.loc[location_df.query('within_bs == 0').index, 'r'],
+           color='C0', s=2, marker='.',
+           label = 'Spacecraft in the Solar Wind', 
+           zorder=10)
 
 ax.legend()
-plt.show()
+ax.set(xlabel = 'Time', 
+       ylabel = r'$r_{JSS} = \sqrt{x_{JSS}^2 + y_{JSS}^2 + z_{JSS}^2} = \sqrt{x_{JSS}^2 + \rho_{JSS}^2} [R_J]$', ylim = (0, 500))
 
-# breakpoint()
+plt.show()
 
 #   Trim data to account for class imbalance
 #   We have way more times inside than outside (1s vs 0s)
@@ -253,7 +300,6 @@ p_dyn_loc_balanced = p_dyn_loc[balanced_indices]
 
 r_surface_lower_balanced = r_surface_lower[balanced_indices]
 r_surface_upper_balanced = r_surface_upper[balanced_indices]
-# breakpoint()
 
 with pm.Model() as potential_model:
     
@@ -322,11 +368,11 @@ with pm.Model() as potential_model:
                             upper = r_surface_upper_balanced)
     
     # Define likelihood
-    likelihood = pm.Normal("obs", mu = mu - observed_r, 
-                            sigma=sigma_dist, 
-                            observed = np.zeros(n_balanced))
+    # likelihood = pm.Normal("obs", mu = mu - observed_r, 
+    #                         sigma=sigma_dist, 
+    #                         observed = np.zeros(n_balanced))
     
-    # likelihood = pm.Potential("obs", pm.logp(pm.Normal.dist(mu=mu, sigma=sigma_dist), value=observed_r))
+    likelihood = pm.Potential("obs", pm.logp(pm.Normal.dist(mu=mu, sigma=sigma_dist), value=observed_r))
 
 
     # Inference!
@@ -393,57 +439,79 @@ fig, axd = plt.subplot_mosaic("""
                               ccc
                               """, 
                               width_ratios=[1,1,1], height_ratios=[1,1],
-                              figsize = (6,4))
+                              figsize = (9,6))
 #   Plot a posterior predictive of the time series in the bottom panel
 c_limit = axd['c'].scatter(np.array([time_balanced]*50), obs_r_s.T,
-                           color='xkcd:light gray', alpha=1, marker='o', ec=None, s=1, zorder=-10,
-                           label = 'Refined Observations')
+                           color='gray', alpha=0.05, marker='o', ec=None, s=1, zorder=-10,
+                           label = 'Refined Range of Possible \nBow Shock Surfaces')
 c_bound = axd['c'].scatter(np.array([time_balanced]*50), mu_s.T, 
-                           color='C0', alpha=1/256, marker='.', s=1, zorder=10,
+                           color='C0', alpha=1, marker='.', s=1, zorder=10,
                            label = 'Modeled Bow Shock Locations')
 
 c_orbit = axd['c'].plot(coordinate_df.index, coordinate_df['r'], 
-                        color='xkcd:Blue', lw=1, zorder=2,
+                        color='C4', lw=1, zorder=2, ls='--',
                         label = 'Spacecraft Position')
 
 axd['c'].set(xlabel='Date', 
              ylim=(80, 200), ylabel=r'Radial Distance $[R_J]$', yscale='log')
     
+axd['c'].legend(loc='upper right')
+axd['c'].set_xlim(dt.datetime(2016,5,1), dt.datetime(2025,1,1))
 
 #   Plot the actual shape of this boundary
 p_dyn_s_10, p_dyn_s_50, p_dyn_s_90 = np.percentile(p_dyn_s.flatten(), [25, 50, 75])
 
 t_ = np.array([np.linspace(0, 0.75 * np.pi, 1000)]*50).T
-p_ = np.zeros((1000, 50))
+# p_ = np.zeros((1000, 50))
 p_dyn_ = np.zeros((1000, 50)) + p_dyn_s_10
-r_ = model_dict['model']((r0_s, r1_s, a0_s, a1_s), (t_, p_, p_dyn_))
-rpl_ = BM.convert_SphericalSolarToCylindricalSolar(r_, t_, p_)
+# r_ = model_dict['model']((r0_s, r1_s, a0_s, a1_s), (t_, p_, p_dyn_))
+# rpl_ = BM.convert_SphericalSolarToCylindricalSolar(r_, t_, p_)
 
-a_north = axd['a'].plot(rpl_[2].T, rpl_[0].T,
-                        color='C2', lw = 1, alpha=1/5)
-a_nor_m = axd['a'].plot(np.mean(rpl_[2].T, 0), np.mean(rpl_[0].T, 0),
-                        color='C2', lw = 1, alpha=1)
+# a_north = axd['a'].plot(rpl_[2].T, rpl_[0].T,
+#                         color='C2', lw = 1, alpha=1/5)
+# a_nor_m = axd['a'].plot(np.mean(rpl_[2].T, 0), np.mean(rpl_[0].T, 0),
+#                         color='C2', lw = 1, alpha=1)
 
 p_dyn_ = np.zeros((1000, 50)) + p_dyn_s_50
 p_ = np.zeros((1000, 50)) + 1*np.pi/2.
 r_ = model_dict['model']((r0_s, r1_s, a0_s, a1_s), (t_, p_, p_dyn_))
 rpl_ = BM.convert_SphericalSolarToCylindricalSolar(r_, t_, p_)
-a_north = axd['a'].plot(rpl_[2].T, rpl_[0].T,
-                        color='C4', lw = 1, alpha=1/5)
+# a_north = axd['a'].plot(rpl_[2].T, rpl_[0].T,
+#                         color='C4', lw = 1, alpha=1/5)
 a_nor_m = axd['a'].plot(np.mean(rpl_[2].T, 0), np.mean(rpl_[0].T, 0),
-                        color='C4', lw = 1, alpha=1)
+                        color='C2', lw = 1, alpha=1,
+                        label = 'Mean Boundary Location \n@ Median Pressure')
 
-p_ = np.zeros((1000, 50)) + p_dyn_s_90
-r_ = model_dict['model']((r0_s, r1_s, a0_s, a1_s), (t_, p_, p_dyn_))
-rpl_ = BM.convert_SphericalSolarToCylindricalSolar(r_, t_, p_)
-a_north = axd['a'].plot(rpl_[2].T, rpl_[0].T,
-                        color='C5', lw = 1, alpha=1/5)
-a_nor_m = axd['a'].plot(np.mean(rpl_[2].T, 0), np.mean(rpl_[0].T, 0),
-                        color='C5', lw = 1, alpha=1)
+r_upper_ = model_dict['model']((r0_s, r1_s, a0_s, a1_s), (t_, p_, p_dyn_)) + sigma_s
+rpl_upper_ = BM.convert_SphericalSolarToCylindricalSolar(r_upper_, t_, p_)
+r_lower_ = model_dict['model']((r0_s, r1_s, a0_s, a1_s), (t_, p_, p_dyn_)) - sigma_s
+rpl_lower_ = BM.convert_SphericalSolarToCylindricalSolar(r_lower_, t_, p_)
+
+# axd['a'].fill(np.append(np.mean(rpl_upper_[2].T, 0), np.mean(rpl_lower_[2], 0)[::-1]), 
+#               np.append(np.mean(rpl_upper_[0].T, 0), np.mean(rpl_lower_[0], 0)[::-1]),
+#               color = 'C2', alpha = 0.4, edgecolor = None,
+#               label = r'Mean Boundary Location $\pm1\sigma$' + '\n@ Median Pressure')
+
+a_nor_m = axd['a'].plot(np.mean(rpl_upper_[2].T, 0), np.mean(rpl_upper_[0].T, 0),
+                        color='C2', lw = 1, alpha=1, ls=':',
+                        label = r'Mean Boundary Location $+1\sigma$')
+
+a_nor_m = axd['a'].plot(np.mean(rpl_lower_[2].T, 0), np.mean(rpl_lower_[0].T, 0),
+                        color='C2', lw = 1, alpha=1, ls=':', 
+                        label = r'Mean Boundary Location $-1\sigma$')
+axd['a'].legend()
+
+# p_ = np.zeros((1000, 50)) + p_dyn_s_90
+# r_ = model_dict['model']((r0_s, r1_s, a0_s, a1_s), (t_, p_, p_dyn_))
+# rpl_ = BM.convert_SphericalSolarToCylindricalSolar(r_, t_, p_)
+# a_north = axd['a'].plot(rpl_[2].T, rpl_[0].T,
+#                         color='C5', lw = 1, alpha=1/5)
+# a_nor_m = axd['a'].plot(np.mean(rpl_[2].T, 0), np.mean(rpl_[0].T, 0),
+#                         color='C5', lw = 1, alpha=1)
 
 
-axd['a'].set(xlim=(125,-250),
-             ylim=(000, 200),
+axd['a'].set(xlim=(150,-400),
+             # ylim=(000, 200),
              aspect=1)
 
 
@@ -471,14 +539,19 @@ for mu_sample in mu_s.T:
 axd['b'].imshow(cm / (n_balanced * 50) * 100, 
                 cmap = 'plasma', extent=(0,1,0,1))
 
+import matplotlib.patheffects as pe
 axd['b'].annotate(r"$\mu$ = {:.1f}%".format(cm[0,0]/(n_balanced*50)*100),
-                  (1/4, 3/4), ha='center', va='center')
+                  (1/4, 3/4), ha='center', va='center', color='white',
+                  path_effects=[pe.withStroke(linewidth=2, foreground="black")])
 axd['b'].annotate(r"$\mu$ = {:.1f}%".format(cm[0,1]/(n_balanced*50)*100),
-                  (3/4, 3/4), ha='center', va='center')
+                  (3/4, 3/4), ha='center', va='center', color='white',
+                 path_effects=[pe.withStroke(linewidth=2, foreground="black")])
 axd['b'].annotate(r"$\mu$ = {:.1f}%".format(cm[1,0]/(n_balanced*50)*100),
-                  (1/4, 1/4), ha='center', va='center')
+                  (1/4, 1/4), ha='center', va='center', color='white',
+                  path_effects=[pe.withStroke(linewidth=2, foreground="black")])
 axd['b'].annotate(r"$\mu$ = {:.1f}%".format(cm[1,1]/(n_balanced*50)*100),
-                  (3/4, 1/4), ha='center', va='center')
+                  (3/4, 1/4), ha='center', va='center', color='white',
+                  path_effects=[pe.withStroke(linewidth=2, foreground="black")])
 
 #   This is verbose, but gives fine control over the labels for the confusion matrix
 axd['b'].set(xlabel = 'Model Prediction', xlim = (0,1), xticks=[0.5], xticklabels=[''],
