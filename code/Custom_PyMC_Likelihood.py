@@ -81,10 +81,13 @@ def optimization(data, model, weights):
 
 def my_loglike(params, sigma, coords, data, model_number):
     
+    #   Determine whether the spacecraft is within (1) or without (0) the 
+    #   boundary
+    #   This returns a numpy array of 0s and 1s
     model = my_model2(params, coords, model_number)
-    #return -0.5 * ((data - model) / sigma) ** 2 - np.log(np.sqrt(2 * np.pi)) - np.log(sigma)
-    # return -(0.5 / sigma**2) * ((data - model) ** 2)
-
+    
+    #   Determine where the spacecraft is outside the boundary
+    #   These are rarer, so we weight them higher
     mask0 = data == 0
     
     #   Weights for the residuals: higher where there are fewer points
@@ -95,10 +98,12 @@ def my_loglike(params, sigma, coords, data, model_number):
     weights[mask0] = 1 - weight_value
     weights[~mask0] = weight_value
     
+    #   Take the residuals
     residuals = (data - model) * weights
     
-    return -(0.5 / sigma**2) * (np.abs(residuals))
-    #return -(0.5 / sigma**2) * ((residuals) ** 2)
+    #   Return a log-likelihood function
+    return -(0.5 / sigma**2) * (residuals**2)
+    
 
 # define a pytensor Op for our likelihood function
 class LogLike(Op):
@@ -283,23 +288,22 @@ class LogLikeGrad(Op):
 # Initalize the Ops
 loglikewithgrad_op = LogLikeWithGrad()
 loglikegrad_op = LogLikeGrad()
-        
        
 #   Data
 location_df, coordinate_df = JP_BFM._ready_DataFrames(dt.datetime(2016, 6, 1), dt.datetime(2024, 3, 1), resolution=10)
 
-model_name = 'Shuelike' #'_AsymmetricAlpha'
+model_name = 'Shuelike' # '_Asymmetric'
 model_dict = BM.init(model_name)
 model_number = model_dict['model_number']
 
 coords = coordinate_df.loc[:, ['r', 't', 'p', 'p_dyn']].to_numpy()
-sigma = 5
+sigma = 1
 
 data = location_df['within_bs'].to_numpy()
 
 mask0 = data == 0
 #weight_value = len(data[mask0]) / len(data)
-weight_value = 1/10
+weight_value = 1/100
 
 weights = np.zeros(len(data))
 weights[mask0] = 1 - weight_value
@@ -354,7 +358,7 @@ with pm.Model() as potential_model:
         else:
             param = param_dist(param_name, **model_dict['param_descriptions'][param_name])
         param_dict[param_name] = param
-    breakpoint()   
+       
     params = list(param_dict.values())
         
     #params = [r0, r1, a0, a1]
@@ -379,7 +383,7 @@ with pm.Model() as potential_model:
     
     # likelihood = pm.Normal("likelihood", pred, sigma_dist, observed=coords.T[0])
     
-    idata_potential = pm.sample(tune=500, draws=2000, chains=4, cores=4)
+    idata_potential = pm.sample(tune=100, draws=500, chains=4, cores=4)
 
 # plot the traces
 az.plot_trace(idata_potential);
@@ -395,6 +399,7 @@ stack = az.extract(idata_potential, num_samples=500)
 
 
 def plot_FitSummary():
+    from sklearn.metrics import confusion_matrix
 
     fig, axs = plt.subplots(figsize=(6,4), nrows=2)
 
@@ -402,6 +407,7 @@ def plot_FitSummary():
 
     all_models = []
     mad_list = []
+    precision_list, recall_list = [], []
     for i in range(100):
         
         param_samples = []
@@ -415,6 +421,14 @@ def plot_FitSummary():
                                                         params = param_samples)
         all_models.append(result_df['within_bs'].to_numpy())
         mad_list.append(np.mean(np.abs(location_df['within_bs'] - result_df['within_bs']) * weights))
+        
+        cm = confusion_matrix(location_df['within_bs'].to_numpy(), result_df['within_bs'].to_numpy(), labels=[0, 1])
+        tn, fp, fn, tp = cm.ravel()
+        
+        precision_list.append(tn / (tn + fn))   # This is actually "negative" precision, precision would be tp / (tp + fp)
+        recall_list.append(tn / (tn + fp))      # This is actually "negative" recall, recall would be tp / (tp + fn)
+                
+    breakpoint()
         
     axs[1].plot(location_df.index, np.mean(all_models, 0), color='black', linewidth=1)
     axs[1].plot(location_df.index, location_df['within_bs'], color='C0', linewidth=1, zorder=0)
