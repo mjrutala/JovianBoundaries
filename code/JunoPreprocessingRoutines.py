@@ -13,19 +13,26 @@ import sys
 sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
 import MMESH_reader
 
-import BoundaryModels as BM
+# import BoundaryModels as BM
 
 def get_paths():
     paths_dict = {'data': Path('/Users/mrutala/projects/JupiterBoundaries/data/'),
                   'SPICE': Path('/Users/mrutala/SPICE/')}
-    paths_dict = paths_dict | {'JunoMetakernel': paths_dict['SPICE']/'juno/metakernel_juno.txt',
-                               'PlanetaryMetakernel': paths_dict['SPICE']/'generic/metakernel_planetary.txt', 
-                               'Louis2023_magnetopause': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_MP.csv', 
+    
+    paths_dict = paths_dict | {'UlyssesMetakernel': paths_dict['SPICE']/'ulysses/metakernel_ulysses.txt',
+                               'GalileoMetakernel': paths_dict['SPICE']/'galileo/metakernel_galileo.txt',
+                               'CassiniMetakernel': paths_dict['SPICE']/'cassini/metakernel_cassini.txt',
+                               'JunoMetakernel': paths_dict['SPICE']/'juno/metakernel_juno.txt',
+                               'PlanetaryMetakernel': paths_dict['SPICE']/'generic/metakernel_planetary.txt'}
+    
+    
+    paths_dict = paths_dict | {'Louis2023_magnetopause': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_MP.csv', 
                                'Louis2023_bowshock': paths_dict['data'] / 'Louis2023/boundary_crossings_caracteristics_BS.csv',
                                'Kurth_bowshock': paths_dict['data'] / 'Kurth_Waves/Kurth_BowShocks_formatted.csv',
                                'Ebert_magnetopause': paths_dict['data'] / 'Ebert_JADE/Magnetopause_Crossings_Ebert2024_v5.csv',
                                'Ebert_bowshock': paths_dict['data'] / 'Ebert_JADE/Bowshock_Crossings_Ebert2024.csv',
-                               'Achilleos2004_bowshock': paths_dict['data']/'Achilleos2004/BowShock_Crossings_Achilleos2004.csv'}
+                               'Achilleos2004_bowshock': paths_dict['data']/'Achilleos2004/BowShock_Crossings_Achilleos2004.csv',
+                               'Galileo_both': paths_dict['data']/'Galileo/GalileoCrossings.csv'}
     
     return paths_dict
     
@@ -241,45 +248,16 @@ def convert_DirectionToLocation(starttime, stoptime, bs_crossings, mp_crossings,
     df.loc[df['in_sw'] == 1, 'location'] = 1
     df.loc[df['in_msh'] == 1, 'location'] = 2
     df.loc[df['in_msp'] == 1, 'location'] = 3
-    
-    # import matplotlib.pyplot as plt
-    # fig, axs = plt.subplots(nrows=3, sharex=True)
-    # axs[0].plot(df['in_sw'], color='C0')
-    # axs[1].plot(df['in_msh'], color='C1')
-    # axs[2].plot(df['in_msp'], color='C2')
-    # plt.show()
-    
-    # fig, axd = plt.subplot_mosaic([['XY', 'ZY'],
-    #                                ['XZ', '.']])
-    
-    # axd['XY'].scatter(df['x'], df['y'],
-    #                   c = df['location'], s = 2)
-    
-    # axd['XZ'].scatter(df['x'], df['z'],
-    #                   c = df['location'], s = 2)
-    
-    # axd['ZY'].scatter(df['z'], df['y'],
-    #                   c = df['location'], s = 2)
-    
-    
-    # axd['XY'].set(xlim = (150, -150),
-    #               ylim = (-150, 150))
-    # axd['XZ'].set(xlim = (150, -150),
-    #               ylim = (-150, 150))
-    # axd['ZY'].set(xlim = (-150, 150),
-    #               ylim = (-150, 150))
             
     return df
         
-    
-
 def get_HourlyFromDatetimes(ts):
     #   Get the nearest hour to hourly precision
     res = [t.replace(minute=0, second=0, microsecond=0) + 
                dt.timedelta(hours=t.minute//30) for t in ts]
     return res
 
-def read_Louis2023_CrossingList(mp=False, bs=True):
+def read_Louis2023_BoundaryList(mp=False, bs=True):
     if mp == True:
         crossing_list = get_paths()['Louis2023_magnetopause']
     else:
@@ -295,7 +273,7 @@ def read_Louis2023_CrossingList(mp=False, bs=True):
     crossings['origin'] = 'Louis+ (2023)'
     return crossings
 
-def read_Kurth_CrossingList(bs=True):
+def read_Kurth_BoundaryList(bs=True):
     if bs == True:
         crossing_list = get_paths()['Kurth_bowshock']
     else:
@@ -310,7 +288,7 @@ def read_Kurth_CrossingList(bs=True):
     crossings['origin'] = 'Kurth, p.c.'
     return crossings
 
-def read_Ebert_CrossingList(mp=False, bs=True):
+def read_Ebert_BoundaryList(mp=False, bs=True):
     if mp == True:
         crossing_list = get_paths()['Ebert_magnetopause']
         crossing_list_names = ['#', 'date', 'time', 
@@ -340,7 +318,7 @@ def read_Ebert_CrossingList(mp=False, bs=True):
     
     return crossings
 
-def read_Achilleos2004_CrossingList(bs=True):
+def read_Achilleos2004_BoundaryList(bs=True):
     if bs == True:
         crossing_list = get_paths()['Achilleos2004_bowshock']
     else:
@@ -354,6 +332,74 @@ def read_Achilleos2004_CrossingList(bs=True):
     crossings['boundary'] = 'bow shock'
     crossings['origin'] = 'Achilleos+ (2004)'
     return crossings
+
+def read_Galileo_CrossingList(bs=True):
+    
+    crossing_list = get_paths()['Galileo_both']
+    
+    crossing_list_names = ['date', 'from', 'to', 'instrument', 'issues', 'inferred']
+    crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = 1)
+    
+    crossings.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for _, row in crossings.iterrows()]
+    crossings = crossings.drop('date', axis=1)
+    crossings = crossings.sort_index()
+    crossings['origin'] = 'Galileo Spreadsheet'
+    
+    return crossings
+    
+
+def convert_BoundaryList_to_CrossingList(boundary_df):
+    """
+    Given a boundary list (indicating which boundary was crossed, and in which 
+    direction), generate a crossing list (indicating where the spacecraft was
+    on either side of the crossing)
+
+    Parameters
+    ----------
+    boundary_df : pandas DataFrame
+        Minimially contains a datetime index, boundary name, and crossing direction
+
+    Returns
+    -------
+    crossing_df : pandas DataFrame
+        Minimally contains a datetime index, initial location, and final location of spacecraft
+
+    """
+    import copy
+    
+    crossing_df = copy.deepcopy(boundary_df)
+    crossing_df['initial'] = ''
+    crossing_df['final'] = ''
+    
+    for indx, row in boundary_df.iterrows():
+        
+        if ('bow shock' or 'bs') in row['boundary'].lower():
+            if row['direction'] == 'in':
+                initial, final = 'SW', 'SH'
+            else:
+                initial, final = 'SH', 'SW'
+        elif ('magnetopause' or 'mp') in row['boundary'].lower():
+            if row['direction'] == 'in':
+                initial, final = 'SH', 'MS'
+            else:
+                initial, final = 'MS', 'SH'
+                
+        crossing_df.loc[indx, 'initial'] = initial
+        crossing_df.loc[indx, 'final'] = final
+    
+    return crossing_df
+
+def _plot():
+    
+    boundaries
+    
+    crossings_galileo = read_Galileo_CrossingList()
+    
+    boundaries_cassini = read_Achilleos2004_BoundaryList()
+    crossings_cassini = convert_BoundaryList_to_CrossingList(boundaries_cassini)
+    
+    
+
 
 def plot_CrossingsAndTrajectories_XYPlane(joy=False, mme=False):
     import spiceypy as spice
