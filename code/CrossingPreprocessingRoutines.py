@@ -32,10 +32,217 @@ def get_paths():
                                'Ebert_magnetopause': paths_dict['data'] / 'Ebert_JADE/Magnetopause_Crossings_Ebert2024_v5.csv',
                                'Ebert_bowshock': paths_dict['data'] / 'Ebert_JADE/Bowshock_Crossings_Ebert2024.csv',
                                'Achilleos2004_bowshock': paths_dict['data']/'Achilleos2004/BowShock_Crossings_Achilleos2004.csv',
-                               'Galileo_both': paths_dict['data']/'Galileo/GalileoCrossings.csv'}
+                               'Galileo_both': paths_dict['data']/'Galileo/GalileoCrossings.csv',
+                               'Bame1992_bowshock': paths_dict['data']/'Bame1992/Crossings_Bame1992.csv'}
     
     return paths_dict
+
+# =============================================================================
+# Convenience functions
+# =============================================================================
+def get_JunoPositions():
     
+    return
+
+def get_GalileoPositions():
+    
+    return
+
+def get_CassiniPositions():
+    
+    return
+
+def get_UlyssesPositions():
+    
+    return
+
+def convert_BoundariesToCrossings(df):
+    
+    #   Convert destination a Crossing List: add 'origin' and 'destination' columns
+    df['origin'] = ''
+    df['destination'] = ''
+    
+    #   origin Solar Wind -> crossing the Bow Shock inward
+    origin_sw_indx = df.query("boundary == 'bow shock' & direction == 'in'").index
+    df.loc[origin_sw_indx, 'origin'] = 'SW'
+    df.loc[origin_sw_indx, 'destination'] = 'SH'
+    
+    #   destination Solar Wind -> crossing the Bow Shock outward
+    destination_sw_indx = df.query("boundary == 'bow shock' & direction == 'out'").index
+    df.loc[destination_sw_indx, 'origin'] = 'SH'
+    df.loc[destination_sw_indx, 'destination'] = 'SW'
+    
+    #   origin Magnedestinationsphere (MSP) -> crossing the magnetopause outward
+    origin_msp_indx = df.query("boundary == 'magnetopause' & direction == 'out'").index
+    df.loc[origin_msp_indx, 'origin'] = 'MS'
+    df.loc[origin_msp_indx, 'destination'] = 'SH'
+    
+    #   destination Magnedestinationsphere (MSP) -> crossing the magnetopause inward
+    destination_msp_indx = df.query("boundary == 'magnetopause' & direction == 'in'").index
+    df.loc[destination_msp_indx, 'origin'] = 'SH'
+    df.loc[destination_msp_indx, 'destination'] = 'MS'
+    
+    #   For the time being, remove partial crossings
+    df = df.query("direction == 'in' | direction == 'out'")
+    
+    return df[['origin', 'destination', 'notes', 'source']]
+
+# =============================================================================
+# Routines which read .csv files and return a DataFrame in the preferred format
+#   - "Boundary Lists" include boundary locations and directions of crossing
+#   - "Crossing Lists" include the m'spheric region the s/c was in before and
+#       after a crossing
+# =============================================================================
+def read_Bame1992_CrossingList(mp=False, bs=True):
+    
+    crossing_filepath = get_paths()['Bame1992_bowshock']
+    
+    #   Interpreted from the .csv file
+    column_names = ['year', 'doy', 'time', 'origin', 'destination']
+    
+    #   Read the boundary file, parse the index to datetimes
+    crossing_df = pd.read_csv(crossing_filepath, sep = ',', names = column_names, header = 1)
+    crossing_df.index = [dt.datetime.strptime('{}-{}T{}'.format(row['year'], row['doy'], row['time']), '%Y-%jT%H:%M') for _, row in crossing_df.iterrows()]
+    crossing_df = crossing_df.sort_index()
+    
+    #   Add required columns
+    crossing_df['notes'] = ''
+    crossing_df['source'] = 'Bame+ (1992)'
+        
+    #   Drop unneeded columns
+    crossing_df = crossing_df[['origin', 'destination', 'notes', 'source']]
+    
+    return crossing_df
+
+def read_Galileo_CrossingList(mp=False, bs=True):
+    
+    crossing_filepath = get_paths()['Galileo_both']
+    
+    #   Interpreted from the .csv file
+    column_names = ['date', 'origin', 'destination', 'instrument', 'issues', 'inferred']
+    
+    #   Read the boundary file, parse the index to datetimes
+    crossing_df = pd.read_csv(crossing_filepath, sep = ',', names = column_names, header = 1)
+    crossing_df.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for _, row in crossing_df.iterrows()]
+    crossing_df = crossing_df.sort_index()
+    
+    #   Add required columns
+    crossing_df['notes'] = crossing_df['issues'].fillna('') + crossing_df['inferred'].fillna('')
+    crossing_df['source'] = 'Galileo Spreadsheet'
+    
+    if mp == True:
+        crossing_df = crossing_df.query("origin == 'MS' | destination == 'MS'")
+    else:
+        crossing_df = crossing_df.query("origin == 'SW' | destination == 'SW'")
+        
+    #   Drop unneeded columns
+    crossing_df = crossing_df[['origin', 'destination', 'notes', 'source']]
+    
+    return crossing_df
+
+def read_Achilleos2004_CrossingList(bs=True):
+    if bs == True:
+        boundary_filepath = get_paths()['Achilleos2004_bowshock']
+    else:
+        print("No magnetopause crossings available from this function!")
+        return
+    
+    #   Interpreted from the .csv file
+    column_names = ['year', 'DoY', 'time', 'boundary', 'direction']
+   
+    #   Read the boundary file, parse the index to datetimes
+    boundary_df = pd.read_csv(boundary_filepath, sep = ',', names = column_names, header = 0)
+    boundary_df.index = [dt.datetime.strptime('{}-{}T{}'.format(row['year'], row['DoY'], row['time']), '%Y-%jT%H:%M') for index, row in boundary_df.iterrows()]
+    boundary_df = boundary_df.sort_index()
+    
+    #   Add required columns
+    boundary_df['boundary'] = 'bow shock'
+    boundary_df['notes'] = ''
+    boundary_df['source'] = 'Achilleos+ (2004)'
+    
+    #   Convert from Boundaries to Crossings
+    crossing_df = convert_BoundariesToCrossings(boundary_df)
+    return crossing_df
+
+def read_Louis2023_CrossingList(mp=False, bs=True):
+    if mp == True:
+        boundary_filepath = get_paths()['Louis2023_magnetopause']
+    else:
+        boundary_filepath = get_paths()['Louis2023_bowshock']
+    
+    #   Interpreted from the .csv file
+    column_names = ['#', 'DoY', 'date', 'time', 'boundary',  'direction', 'notes', 
+                    'x_JSS', 'y_JSS', 'z_JSS', 
+                    'x_IAU', 'y_IAU', 'z_IAU', 'r_IAU', 'theta_IAU', 'phi_IAU', 
+                    'p_dyn', 'r_mp', 'r_bs']
+    
+    #   Read the boundary file, parse the index to datetimes
+    boundary_df = pd.read_csv(boundary_filepath, sep=';', names=column_names, 
+                              header=0)
+    boundary_df.index = [dt.datetime.strptime(row['date']+'T'+row['time'], '%Y/%m/%dT%H:%M') for index, row in boundary_df.iterrows()]
+    boundary_df = boundary_df.sort_index()
+    boundary_df['source'] = 'Louis+ (2023)' # Keep track of the source
+
+    #   Convert from Boundaries to Crossings
+    crossing_df = convert_BoundariesToCrossings(boundary_df)
+    return crossing_df
+
+def read_Kurth_CrossingList(bs=True):
+    if bs == True:
+        boundary_filepath = get_paths()['Kurth_bowshock']
+    else:
+        print("No magnetopause crossings available from this function!")
+        return
+    
+    #   Interpreted from the .csv file
+    column_names = ['apojoves', 'date', 'direction', 'notes']
+    
+    #   Read the boundary file, parse the index to datetimes
+    boundary_df = pd.read_csv(boundary_filepath, sep = ',', names = column_names, header = None)
+    boundary_df.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for index, row in boundary_df.iterrows()]
+    boundary_df = boundary_df.sort_index()
+    
+    #   Add required columns
+    boundary_df['boundary'] = 'bow shock'
+    boundary_df['source'] = 'Kurth, p.c.'
+    
+    #   Convert from Boundaries to Crossings
+    crossing_df = convert_BoundariesToCrossings(boundary_df)
+    return crossing_df
+
+def read_Ebert_CrossingList(mp=False, bs=True):
+    if mp == True:
+        crossing_list = get_paths()['Ebert_magnetopause']
+        crossing_list_names = ['#', 'date', 'time', 
+                               'r', 'x_JSO', 'y_JSO', 'z_JSO', 
+                               'lat', 'mlat', 'lon', 'LT', 
+                               'notes']
+        crossing_label = 'magnetopause'
+    else:
+        crossing_list = get_paths()['Ebert_bowshock']
+        crossing_list_names = ['#', 'date', 'time',
+                               'r', 'lat', 'mlat', 'MLT']
+        crossing_label = 'bow shock'
+        
+    #   Read the correct list, and drop rows without events
+    crossings = pd.read_csv(crossing_list, 
+                            sep=',', names = crossing_list_names, header=0,
+                            skipinitialspace=True)
+    crossings = crossings.dropna(axis = 'index', how = 'all', subset = ['date', 'time'])
+    
+    #   Set the index to the datetime, rather than an int
+    crossings.index = [dt.datetime.strptime(row['date']+'T'+row['time'], '%Y-%jT%H:%M') for _, row in crossings.iterrows()]
+    crossings = crossings.sort_index()
+    
+    #   Add the origin of these crossings to the df
+    crossings['boundary'] = crossing_label
+    crossings['source'] = 'Ebert (+ Montgomery), p.c.'
+    
+    return crossings
+
+# =============================================================================
+# Routines which concatenate DataFrames in useful ways
+# =============================================================================
 def make_CombinedCrossingsList(boundary = 'BS', which = ['Louis', 'Kurth', 'Ebert']):
     import spiceypy as spice
     
@@ -257,95 +464,15 @@ def get_HourlyFromDatetimes(ts):
                dt.timedelta(hours=t.minute//30) for t in ts]
     return res
 
-def read_Louis2023_BoundaryList(mp=False, bs=True):
-    if mp == True:
-        crossing_list = get_paths()['Louis2023_magnetopause']
-    else:
-        crossing_list = get_paths()['Louis2023_bowshock']
-        
-    crossing_list_names = ['#', 'DoY', 'date', 'time', 'boundary',  'direction', 'notes', 
-                           'x_JSS', 'y_JSS', 'z_JSS', 
-                           'x_IAU', 'y_IAU', 'z_IAU', 'r_IAU', 'theta_IAU', 'phi_IAU', 
-                           'p_dyn', 'r_mp', 'r_bs']
-    crossings = pd.read_csv(crossing_list, sep=';', names=crossing_list_names, header=0)
-    crossings.index = [dt.datetime.strptime(row['date']+'T'+row['time'], '%Y/%m/%dT%H:%M') for index, row in crossings.iterrows()]
-    crossings = crossings.sort_index()
-    crossings['origin'] = 'Louis+ (2023)'
-    return crossings
 
-def read_Kurth_BoundaryList(bs=True):
-    if bs == True:
-        crossing_list = get_paths()['Kurth_bowshock']
-    else:
-        print("No magnetopause crossings available from this function!")
-        return
-    
-    crossing_list_names = ['apojoves', 'date', 'direction', 'notes']
-    crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = None)
-    crossings.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for index, row in crossings.iterrows()]
-    crossings = crossings.sort_index()
-    crossings['boundary'] = 'bow shock'
-    crossings['origin'] = 'Kurth, p.c.'
-    return crossings
 
-def read_Ebert_BoundaryList(mp=False, bs=True):
-    if mp == True:
-        crossing_list = get_paths()['Ebert_magnetopause']
-        crossing_list_names = ['#', 'date', 'time', 
-                               'r', 'x_JSO', 'y_JSO', 'z_JSO', 
-                               'lat', 'mlat', 'lon', 'LT', 
-                               'notes']
-        crossing_label = 'magnetopause'
-    else:
-        crossing_list = get_paths()['Ebert_bowshock']
-        crossing_list_names = ['#', 'date', 'time',
-                               'r', 'lat', 'mlat', 'MLT']
-        crossing_label = 'bow shock'
-        
-    #   Read the correct list, and drop rows without events
-    crossings = pd.read_csv(crossing_list, 
-                            sep=',', names = crossing_list_names, header=0,
-                            skipinitialspace=True)
-    crossings = crossings.dropna(axis = 'index', how = 'all', subset = ['date', 'time'])
-    
-    #   Set the index to the datetime, rather than an int
-    crossings.index = [dt.datetime.strptime(row['date']+'T'+row['time'], '%Y-%jT%H:%M') for _, row in crossings.iterrows()]
-    crossings = crossings.sort_index()
-    
-    #   Add the origin of these crossings to the df
-    crossings['boundary'] = crossing_label
-    crossings['origin'] = 'Ebert (+ Montgomery), p.c.'
-    
-    return crossings
 
-def read_Achilleos2004_BoundaryList(bs=True):
-    if bs == True:
-        crossing_list = get_paths()['Achilleos2004_bowshock']
-    else:
-        print("No magnetopause crossings available from this function!")
-        return
-    
-    crossing_list_names = ['year', 'DoY', 'time', 'boundary', 'direction']
-    crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = 0)
-    crossings.index = [dt.datetime.strptime('{}-{}T{}'.format(row['year'], row['DoY'], row['time']), '%Y-%jT%H:%M') for index, row in crossings.iterrows()]
-    crossings = crossings.sort_index()
-    crossings['boundary'] = 'bow shock'
-    crossings['origin'] = 'Achilleos+ (2004)'
-    return crossings
 
-def read_Galileo_CrossingList(bs=True):
-    
-    crossing_list = get_paths()['Galileo_both']
-    
-    crossing_list_names = ['date', 'from', 'to', 'instrument', 'issues', 'inferred']
-    crossings = pd.read_csv(crossing_list, sep = ',', names = crossing_list_names, header = 1)
-    
-    crossings.index = [dt.datetime.strptime(row['date'], '%Y-%jT%H:%M') for _, row in crossings.iterrows()]
-    crossings = crossings.drop('date', axis=1)
-    crossings = crossings.sort_index()
-    crossings['origin'] = 'Galileo Spreadsheet'
-    
-    return crossings
+
+
+
+
+
     
 
 def convert_BoundaryList_to_CrossingList(boundary_df):
