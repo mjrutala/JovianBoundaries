@@ -89,11 +89,7 @@ def init(model_name):
     bm = {'Shuelike': 
               {'model': Shuelike, 
                'model_number': 1,
-               'param_dict': {
-                   'r0': [30, 40, 50, 60, 70, 80],
-                   'r1': [-0.1, -0.2, -0.3, -0.4],
-                   'a0': [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-                   'a1': [0.01, 0.1, 1.0, 10.0]},
+               'param_dict': {},
                'param_distributions': {
                    'r0': pm.InverseGamma,
                    'r1': pm.Normal,
@@ -107,33 +103,44 @@ def init(model_name):
                    # 'a1': {'lower': "-1 * param_dict['a0']", 'upper': "1", 'EVAL_NEEDED':True}}
                    'a1': {'lower': -10, 'upper': 10}}
                },
-          'Shuelike_Asymmetric':
-              {'model': Shuelike_Asymmetric, 
+          'Shuelike_AsymmetryCase1':
+              {'model': Shuelike_AsymmetryCase1, 
                'model_number': 2,
-               'param_dict': {
-                   'r0': [30, 40, 50, 60, 70, 80],
-                   'r1': [-0.1, -0.2, -0.3, -0.4],
-                   'a0': [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-                   'a1': [0.01, 0.1, 1.0, 10.0]},
+               'param_dict': {},
                'param_distributions': {
                    'r0': pm.InverseGamma,
                    'r1': pm.Normal,
                    'r2': pm.Normal,
-                   'r3': pm.Normal,
                    'a0': pm.InverseGamma,
                    'a1': pm.Uniform},
                'param_descriptions': {
                    'r0': {'mu': 60, 'sigma': 30},
                    'r1': {'mu': -0.2, 'sigma': 0.05},
-                   'r2': {'mu': 0, 'sigma': 10},
-                   'r3': {'mu': 0, 'sigma': 10},
+                   'r2': {'mu': -10, 'sigma': 10},
                    'a0': {'mu': 1.0, 'sigma': 0.5},
                    'a1': {'lower': -10, 'upper': 10}}
-               }
+               },
+          'Shuelike_AsymmetryCase1p5':
+              {'model': Shuelike_AsymmetryCase1p5, 
+               'model_number': 3,
+               'param_dict': {},
+               'param_distributions': {
+                   'r0': pm.InverseGamma,
+                   'r1': pm.Normal,
+                   'r2': pm.Normal,
+                   'a0': pm.InverseGamma,
+                   'a1': pm.Uniform},
+               'param_descriptions': {
+                   'r0': {'mu': 60, 'sigma': 30},
+                   'r1': {'mu': -0.2, 'sigma': 0.05},
+                   'r2': {'mu': -10, 'sigma': 10},
+                   'a0': {'mu': 1.0, 'sigma': 0.5},
+                   'a1': {'lower': -10, 'upper': 10}}
+                 }
+              
           }
     return bm[model_name]
           
-
 # =============================================================================
 # Section 1.5: 3D Functional Forms for the boundaries
 # =============================================================================
@@ -205,83 +212,9 @@ def Shuelike(parameters=[], coordinates=[], variables=False):
     
     return r
 
-def Shuelike_UniformPressureExponent(parameters=[], coordinates=[], variables=False):
-    """
-    r = r_0 (2/(1 + cos(theta)))^alpha
-
-    Parameters
-    ----------
-    parameters : TYPE
-        DESCRIPTION.
-    coordinates : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    r : TYPE
-        DESCRIPTION.
-
-    """
-    if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
-    #rho, phi, ell = coordinates
-    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
-    t, p, p_dyn = coordinates
-    r0, r1, a0, a1 = parameters
-    
-    # if (p_dyn < 0).any():
-    #     breakpoint()
-    r_0 = r0*((p_dyn)**r1)
-    
-    a_0 = a0 + a1 * p_dyn**r1
-    
-    r = r_0 * (2/(1 + np.cos(t)))**a_0
-    #rho, phi, ell = convert_SphericalSolarToCylindricalSolar(r, t, p)
-    
-    #rho = np.interp(coordinates[2], ell, rho, left=np.nan, right=np.nan)
-    
-    return r
-
-def Shuelike_NonuniformPressureExponent(parameters=[], coordinates=[], variables=False):
-    """
-    r = r_0 (2/(1 + cos(theta)))^alpha
-
-    Parameters
-    ----------
-    parameters : TYPE
-        DESCRIPTION.
-    coordinates : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    r : TYPE
-        DESCRIPTION.
-
-    """
-    if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
-    #rho, phi, ell = coordinates
-    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
-    t, p, p_dyn = coordinates
-    r0, r1, a0, a1, a2 = parameters
-    
-    # if (p_dyn < 0).any():
-    #     breakpoint()
-    r_0 = r0*((p_dyn)**r1)
-    
-    a_0 = a0 + a1 * p_dyn**a2
-    
-    r = r_0 * (2/(1 + np.cos(t)))**a_0
-    #rho, phi, ell = convert_SphericalSolarToCylindricalSolar(r, t, p)
-    
-    #rho = np.interp(coordinates[2], ell, rho, left=np.nan, right=np.nan)
-    
-    return r
-
 def Shuelike_AsymmetryCase1(parameters=[], coordinates=[], variables=False):
     """
-    r = r_0 (2/(1 + cos(theta)))^alpha
+    Shuelike, w/ Polar Flattening + dawn/dusk symmetry
 
     Parameters
     ----------
@@ -298,26 +231,22 @@ def Shuelike_AsymmetryCase1(parameters=[], coordinates=[], variables=False):
     """
     if variables:
         return ('t', 'p', 'p_dyn'), 'r'
-    #rho, phi, ell = coordinates
-    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
+    
     t, p, p_dyn = coordinates
-    r0, r1, r2, r3, r4, a0, a1 = parameters
+    r0, r1, r2, a0, a1 = parameters
     
-    # if (p_dyn < 0).any():
-    #     breakpoint()
-    r_0 = r0*((p_dyn)**r1) + r2*np.sin(p)**2 + r3*np.sin(t + r4)*np.sin(p)
+
+    r_n = (r0 + r2*np.sin(t/2)*np.cos(p)**2) * ((p_dyn)**r1)
     
-    a_0 = a0 + a1 * p_dyn**r1
+    a_f = (a0 + a1 * p_dyn)# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
     
-    r = r_0 * (2/(1 + np.cos(t)))**a_0 
-    #rho, phi, ell = convert_SphericalSolarToCylindricalSolar(r, t, p)
-    
-    #rho = np.interp(coordinates[2], ell, rho, left=np.nan, right=np.nan)
-    
+    r = r_n * (2/(1 + np.cos(t)))**a_f
+
     return r
-def Shuelike_Asymmetric(parameters=[], coordinates=[], variables=False):
+
+def Shuelike_AsymmetryCase1p5(parameters=[], coordinates=[], variables=False):
     """
-    r = r_0 (2/(1 + cos(theta)))^alpha
+    Shuelike, w/ different formulation of polar flattening + dawn/dusk symmetry
 
     Parameters
     ----------
@@ -334,28 +263,21 @@ def Shuelike_Asymmetric(parameters=[], coordinates=[], variables=False):
     """
     if variables:
         return ('t', 'p', 'p_dyn'), 'r'
-    #rho, phi, ell = coordinates
-    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
+    
     t, p, p_dyn = coordinates
-    r0, r1, r2, r3, a0, a1 = parameters
+    r0, r1, r2, a0, a1 = parameters
     
-    # with np.errstate(invalid='raise'):
-    #     try: 
-    #         r_0 = r0*(p_dyn**r1)
-    #     except RuntimeError():
-    #         print('You caught the error!')
-    r_0 = (r0 + r2*np.cos(p)**2 + r3*np.sin(p)*np.sin(t))*((p_dyn)**r1)
+
+    r_n = (r0 * (p_dyn)**r1) * (r2*np.sin(t/2)*np.cos(p)**2)
     
-    a_0 = (a0 + a1 * p_dyn)# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
+    a_f = (a0 + a1 * p_dyn)# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
     
-    r = r_0 * (2/(1 + np.cos(t)))**a_0
-    #rho, phi, ell = convert_SphericalSolarToCylindricalSolar(r, t, p)
-    
-    #rho = np.interp(coordinates[2], ell, rho, left=np.nan, right=np.nan)
-    
+    r = r_n * (2/(1 + np.cos(t)))**a_f
+
     return r
 
-def Shuelike_AsymmetryCase2(parameters=[], coordinates=[], variables=False):
+
+def Shuelike_AsymmetryCase3(parameters=[], coordinates=[], variables=False):
     """
     
 
@@ -407,13 +329,13 @@ def Joylike(parameters=[], coordinates=[], variables=False):
 
     """
     if variables:
-        return ('x', 'y', 'p_dyn'), 'abs_z'
+        return ('t', 'p', 'p_dyn'), 'r'
     
-    x, y, p_dyn = coordinates
+    t, p, p_dyn = coordinates
     a0, a1, b0, b1, c0, c1, d0, d1, e0, e1, f0, f1 = parameters
     
-    x = x * 1/120
-    y = y * 1/120
+    # x = x * 1/120
+    # y = y * 1/120
     
     a = a0 + a1*p_dyn**(-1/4)
     b = b0 + b1*p_dyn**(-1/4)
@@ -421,10 +343,15 @@ def Joylike(parameters=[], coordinates=[], variables=False):
     d = d0 + d1*p_dyn
     e = e0 + e1*p_dyn
     f = f0 + f1*p_dyn
-    z = np.sqrt(a + b*x + c*x**2 + d*y + e*y**2 + f*x*y)
-    return z * 120
     
-    return
+    A = c*np.cos(t)**2 + e*np.sin(t)**2*np.sin(p)**2 - f*np.sin(t)*np.cos(t)*np.sin(p) - np.sin(t)**2*np.cos(p)**2
+    B = b*np.cos(t) - d*np.sin(t)*np.sin(p)
+    C = a
+    
+    r = (-B - np.sqrt(B**2 - 4*A*C)) / (2*A)
+    
+    
+    return np.array(r) * 120
 
 
 def boundary_Winslowlike():
