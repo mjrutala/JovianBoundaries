@@ -30,10 +30,6 @@ import JoyBoundaryCoords as JBC
 import CrossingPreprocessingRoutines as preproc
 import CrossingPostprocessingRoutines as postproc
 
-import sys
-sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
-import MMESH_reader
-
 # Load custom plotting style
 try:
     plt.style.use('/Users/mrutala/code/python/mjr.mplstyle')
@@ -42,39 +38,17 @@ except:
 
 resolution = '10Min'
 
-positions_df = postproc.PostprocessCrossings('BS', spacecraft_to_use = ['Cassini'])
+positions_df = postproc.PostprocessCrossings('BS', spacecraft_to_use = ['Ulysses', 'Cassini', 'Juno'])
 
 # Galileo binary search-- what causes our problems?
 n = len(positions_df)
-# positions_df = positions_df.iloc[int(0.0 * n):int(0.1 * n)] # Works!
-# positions_df = positions_df.iloc[int(0.1 * n):int(0.2 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.2 * n):int(0.3 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.3 * n):int(0.4 * n)] # Works!
-# positions_df = positions_df.iloc[int(0.4 * n):int(0.5 * n)] # Works!
-# positions_df = positions_df.iloc[int(0.5 * n):int(0.6 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.6 * n):int(0.7 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.7 * n):int(0.8 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.8 * n):int(0.9 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.9 * n):int(1.0 * n)] # Failed
-
-# positions_df = positions_df.iloc[int(0.10 * n):int(0.15 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.15 * n):int(0.2 * n)] # Works!
-
-# positions_df = positions_df.iloc[int(0.10 * n):int(0.125 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.125 * n):int(0.15 * n)] # Works!
-
-# positions_df = positions_df.iloc[int(0.10 * n):int(0.1125 * n)] # Failed
-# positions_df = positions_df.iloc[int(0.1125 * n):int(0.125 * n)] # Works!
-# positions_df = positions_df.iloc[int(0.10 * n):int(0.1125 * n)]
 
 positions_df = positions_df.query('r_upperbound < 1e3 & r_lowerbound < 1e3')
 
-# qry = "(spacecraft == 'Galileo' & notes.str.contains('BOTH') & region != 'UN') | spacecraft != 'Galileo'"
-# positions_df = positions_df.query(qry, engine="python")
+# FOR TESTING, TO MAKE THE MCMC SAMPLER RUN FASTER
+# positions_df = positions_df.sample(frac=0.5, axis='rows')
 
 from scipy.stats import skewnorm
-# FOR TESTING, TO MAKE THE MCMC SAMPLER RUN FASTER
-# boundary_timeseries_df = boundary_timeseries_df.sample(frac=0.05, axis='rows')
 
 r = positions_df['r'].to_numpy('float64')
 t = positions_df['t'].to_numpy('float64')
@@ -97,11 +71,11 @@ test_pressure_draws = pm.draw(test_pressure_dist, draws=n_pressure_draws)
 # Hacky, but assume negative pressures correspond to small pressures
 test_pressure_draws[test_pressure_draws < 0] = np.min(test_pressure_draws[test_pressure_draws > 0])
 
-if type(test_pressure_draws) != list:
+if len(np.shape(test_pressure_draws)) < 2:
     test_pressure_draws = [test_pressure_draws]
 
 # Model and MCMC params
-model_name = 'Shuelike'
+model_name = 'Shuelike_AsymmetryCase1'
 model_dict = BM.init(model_name)
 model_number = model_dict['model_number']
 
@@ -120,12 +94,11 @@ for pressure_draw in test_pressure_draws:
         for param_name in model_dict['param_distributions'].keys():
             param_dist = model_dict['param_distributions'][param_name]
             
-            # param = param_dist(param_name, **model_dict['param_descriptions'][param_name])
+            param = param_dist(param_name, **model_dict['param_descriptions'][param_name])
             
-            param_mu = param_dist(param_name+'_mu', **model_dict['param_descriptions'][param_name])
-            param_sigma = pm.HalfNormal(param_name+'_sigma', 1)
-            
-            param = pm.Normal(param_name, mu = param_mu, sigma = param_sigma)
+            # param_mu = param_dist(param_name+'_mu', **model_dict['param_descriptions'][param_name])
+            # param_sigma = pm.HalfNormal(param_name+'_sigma', 1)
+            # param = pm.Normal(param_name, mu = param_mu, sigma = param_sigma)
             
             param_dict[param_name] = param
         
@@ -133,8 +106,9 @@ for pressure_draw in test_pressure_draws:
         param_names = list(param_dict.keys())
         tracked_var_names = []
         for pname in param_names:
-            tracked_var_names.extend([pname+'_mu', pname+'_sigma', pname])
-        
+            # tracked_var_names.extend([pname+'_mu', pname+'_sigma', pname]) # Do track combined param
+            # tracked_var_names.extend([pname+'_mu', pname+'_sigma']) # Don't track combined param
+            tracked_var_names.append(pname)
         
         params = list(param_dict.values())
         #params = [r0, r1, a0, a1]
@@ -156,17 +130,24 @@ for pressure_draw in test_pressure_draws:
         
         r_obs = pm.Uniform("r_obs", lower = r_lower, upper = r_upper)
         
-        sigma = pm.HalfNormal("sigma", sigma = model_sigma_value)
+        # Make sigma increase with t
+        # sigma_b = pm.HalfNormal("sigma_b", sigma=10)
+        # sigma_m = pm.HalfNormal("sigma_m", sigma=5)
+        # sigma = pm.HalfNormal("sigma", sigma = sigma_m * np.tan(t/2)**2 + sigma_b)
         
-        # Track sigma in the sampler as well
-        tracked_var_names.append('sigma')
+        # # Track sigma in the sampler as well
+        # tracked_var_names.extend(['sigma_m', 'sigma_b'])
+        
+        sigma = pm.HalfNormal("sigma", sigma=10)
+        sigma_t = pm.HalfNormal("sigma_t", sigma = sigma * (2/(1 + np.cos(t))))
+        tracked_var_names.extend(['sigma'])
         
         likelihood = pm.Potential("likelihood", pm.logp(pm.Normal.dist(mu=mu_pred, sigma=sigma), value=r_obs))
 
     with test_potential:
         idata = pm.sample(tune=500, draws=500, chains=4, cores=3,
                           var_names = tracked_var_names,
-                          target_accept=0.99)
+                          target_accept=0.95)
                           # init = 'adapt_diag+jitter') # prevents 'jitter', which might move points init vals around too much here
     
     posterior = idata.posterior
@@ -192,128 +173,10 @@ plt.show()
 #   - Show the 
 # =============================================================================
 
-def plot_Interpretation(model_dict, posterior):
-    
-    # Draw samples to give a sense of the model spread:
-    posterior_params_samples = az.extract(posterior, num_samples=100)
-    
-    posterior_params_mean = []
-    posterior_params_vals = []
-    for param_name in model_dict['param_distributions'].keys():
-        
-        # Get mean values for each parameter
-        posterior_params_mean.append(np.mean(posterior[param_name].values))
-        
-        # And record the sample values
-        posterior_params_vals.append(posterior_params_samples[param_name].values)
-    
-    # Transpose so we get a list of params in proper order
-    posterior_params_vals = np.array(posterior_params_vals).T
-        
-    # Plotting coords
-    n_coords = int(1e4)
-    mean_p_dyn = np.mean(positions_df['p_dyn'])
-    
-    t_coord = np.linspace(0, 0.99*np.pi, n_coords)
-    
-    p_coords = {'North': np.full(n_coords, 0),
-                'South': np.full(n_coords, +np.pi),
-                'Dawn': np.full(n_coords, +np.pi/2.),
-                'Dusk': np.full(n_coords, -np.pi/2.)
-                }
-    
-    p_dyn_coords = {'16': np.full(n_coords, np.percentile(positions_df['p_dyn'], 16)),
-                    '50': np.full(n_coords, np.percentile(positions_df['p_dyn'], 50)),
-                    '84': np.full(n_coords, np.percentile(positions_df['p_dyn'], 84))
-                    }
-    
-    fig, axs = plt.subplots(nrows = 3, sharex = True,
-                            figsize = (6.5, 5))
-    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.7, top=0.98,
-                        hspace=0.08)
-    
-    # Set up each set of axes
-    # x_label_centered_x = (axs[0].get_position()._points[0,0] + axs[0].get_position()._points[1,0])/2.
-    # x_label_centered_y = (0 + axs[1].get_position()._points[0,1])/2.
-    # fig.supxlabel(r'$x_{JSS}$ [$R_J$] (+ toward Sun)', 
-    #               position = (x_label_centered_x, x_label_centered_y),
-    #               ha = 'center', va = 'top')
-    # y_label_centered_x = (0 + axs[0].get_position()._points[0,0])/2.
-    # y_label_centered_y = (axs[0].get_position()._points[1,1] + axs[1].get_position()._points[0,1])/2.
-    # fig.supylabel(r'$\rho_{JSS} = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]', 
-    #               position = (y_label_centered_x, y_label_centered_y),
-    #               ha = 'right', va = 'center')
-    
-    axs[0].set(xlim = (300, -600),
-               ylim = (-200, 200),
-               aspect = 1)
-    axs[1].set(ylim = (-200, 200),
-               aspect = 1)
-    axs[2].set(ylim = (0, 400),
-               aspect = 1)
-    
-    axs[0].annotate('(a)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
-    axs[1].annotate('(b)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
-    axs[2].annotate('(c)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
-    
-    direction_colors = {'North': 'C0',
-                        'South': 'C1',
-                        'Dawn': 'C3',
-                        'Dusk': 'C5'}
-    p_dyn_linestyles = {'16': ':',
-                        '50': '-',
-                        '84': '--'}
-
-    # Top axes: Side-view, dusk on bottom
-    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['Dusk'], p_dyn_coords['50']])
-    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dusk'])
-    axs[0].plot(xyz[0], xyz[1], color='black')
-    
-    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['Dawn'], p_dyn_coords['50']])
-    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dawn'])
-    axs[0].plot(xyz[0], xyz[1], color='black')
-    
-    for params in posterior_params_vals:
-        r_coord = model_dict['model'](params, [t_coord, p_coords['Dusk'], p_dyn_coords['50']])
-        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dusk'])
-        axs[0].plot(xyz[0], xyz[1], color='black', alpha=0.05, zorder=-10)
-        
-        r_coord = model_dict['model'](params, [t_coord, p_coords['Dawn'], p_dyn_coords['50']])
-        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dawn'])
-        axs[0].plot(xyz[0], xyz[1], color='black', alpha=0.05, zorder=-10)
-    
-    # Middle axes: Top-down view
-    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['North'], p_dyn_coords['50']])
-    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['North'])
-    axs[1].plot(xyz[0], xyz[2], color='black')
-    
-    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['South'], p_dyn_coords['50']])
-    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['South'])
-    axs[1].plot(xyz[0], xyz[2], color='black')
-    
-    for params in posterior_params_vals:
-        r_coord = model_dict['model'](params, [t_coord, p_coords['North'], p_dyn_coords['50']])
-        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['North'])
-        axs[1].plot(xyz[0], xyz[2], color='black', alpha=0.05, zorder=-10)
-        
-        r_coord = model_dict['model'](params, [t_coord, p_coords['South'], p_dyn_coords['50']])
-        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['South'])
-        axs[1].plot(xyz[0], xyz[2], color='black', alpha=0.05, zorder=-10)
-    
-    # Bottom axes: plot for different pressures, superimposed
-    for p_dyn_value in p_dyn_coords.keys():
-        for direction in ['North', 'South', 'Dawn', 'Dusk']:
-            
-            r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords[direction], p_dyn_coords[p_dyn_value]])
-            rpl = BM.convert_SphericalSolarToCylindricalSolar(r_coord, t_coord, p_coords[direction])
-            axs[2].plot(rpl[2], rpl[0],
-                        color = direction_colors[direction], ls = p_dyn_linestyles[p_dyn_value],
-                        label = r'{}, $p_{{dyn}} = {}^{{th}} \%ile$'.format(direction, p_dyn_value))
-            
-            axs[2].legend()
 
 
-    
+
+
 
 # #   Sample the posterior
 # samples = az.extract(idata, group='posterior', num_samples=50)
