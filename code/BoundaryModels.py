@@ -105,7 +105,7 @@ def init(model_name):
                    'a0': {'mu': 1, 'sigma': 0.5},
                    # 'a1': {'lower': "-1 * param_dict['a0']/p_dyn", 'upper': "2", 'EVAL_NEEDED':True}}
                    # 'a1': {'lower': "-1 * param_dict['a0']", 'upper': "1", 'EVAL_NEEDED':True}}
-                   'a1': {'lower': "-10", 'upper': "10", 'EVAL_NEEDED':True}}
+                   'a1': {'lower': -10, 'upper': 10}}
                },
           'Shuelike_Asymmetric':
               {'model': Shuelike_Asymmetric, 
@@ -125,36 +125,11 @@ def init(model_name):
                'param_descriptions': {
                    'r0': {'mu': 60, 'sigma': 30},
                    'r1': {'mu': -0.2, 'sigma': 0.05},
-                   'r2': {'mu': -5, 'sigma': 5},
-                   'r3': {'mu': 0, 'sigma':10},
+                   'r2': {'mu': 0, 'sigma': 10},
+                   'r3': {'mu': 0, 'sigma': 10},
                    'a0': {'mu': 1.0, 'sigma': 0.5},
-                   'a1': {'lower': "-1 * param_dict['a0']", 'upper': "2", 'EVAL_NEEDED':True}}
-               },
-          'Shuelike_AsymmetricAlpha':
-              {'model': Shuelike_AsymmetricAlpha, 
-               'model_number': 3,
-               'param_dict': {
-                   'r0': [30, 40, 50, 60, 70, 80],
-                   'r1': [-0.1, -0.2, -0.3, -0.4],
-                   'a0': [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-                   'a1': [0.01, 0.1, 1.0, 10.0]},
-               'param_distributions': {
-                   'r0': pm.InverseGamma,
-                   'r1': pm.Normal,
-                   'r2': pm.Normal,
-                   'r3': pm.Normal,
-                   'a0': pm.InverseGamma,
-                   'a1': pm.Normal,
-                   'a2': pm.Normal},
-               'param_descriptions': {
-                   'r0': {'mu': 60, 'sigma': 30},
-                   'r1': {'mu': -0.2, 'sigma': 0.05},
-                   'r2': {'mu': -5, 'sigma': 5},
-                   'r3': {'mu': 0, 'sigma':10},
-                   'a0': {'mu': 1.0, 'sigma': 0.5},
-                   'a1': {'mu': 0, 'sigma': 0.1},
-                   'a2': {'mu': 0.1, 'sigma': 0.5}}
-               },
+                   'a1': {'lower': -10, 'upper': 10}}
+               }
           }
     return bm[model_name]
           
@@ -380,9 +355,9 @@ def Shuelike_Asymmetric(parameters=[], coordinates=[], variables=False):
     
     return r
 
-def Shuelike_AsymmetricAlpha(parameters=[], coordinates=[], variables=False):
+def Shuelike_AsymmetryCase2(parameters=[], coordinates=[], variables=False):
     """
-    r = r_0 (2/(1 + cos(theta)))^alpha
+    
 
     Parameters
     ----------
@@ -399,106 +374,20 @@ def Shuelike_AsymmetricAlpha(parameters=[], coordinates=[], variables=False):
     """
     if variables:
         return ('t', 'p', 'p_dyn'), 'r'
-    #rho, phi, ell = coordinates
-    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
+    
     t, p, p_dyn = coordinates
-    r0, r1, r2, r3, a0, a1, a2 = parameters
+    r0, r1, r2, r3, r4, a0, a1, a2, a3, a4 = parameters
     
-    # with np.errstate(invalid='raise'):
-    #     try: 
-    #         r_0 = r0*(p_dyn**r1)
-    #     except RuntimeError():
-    #         print('You caught the error!')
-    r_0 = (r0 + r2*np.cos(p)**2 + r3*np.sin(p)*np.sin(t))*((p_dyn)**r1)
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
     
-    a_0 = ((a0 + a2*np.sin(t/2.)) + a1 * p_dyn)# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
+    r_n = (r0 * p_dyn**r1) * (r2*np.cos(p)**2 + r3*sg_pos*np.sin(p)*np.cos(t) + r4*sg_neg*np.sin(p)*np.cos(t))
     
-    r = r_0 * (2/(1 + np.cos(t)))**a_0
-    #rho, phi, ell = convert_SphericalSolarToCylindricalSolar(r, t, p)
+    a_f = (a0 + p_dyn*a1) * (a2*np.cos(p)**2 + a3*sg_pos*np.sin(p)*np.cos(t) + a4*sg_neg*np.sin(p)*np.cos(t))
     
-    #rho = np.interp(coordinates[2], ell, rho, left=np.nan, right=np.nan)
-    
+    r = r_n * (2/(1 + np.cos(t)))**a_f
+
     return r
-
-def Shuelike_MOP_Asymmetric(parameters=[], coordinates=[], variables=False):
-    """
-    r = r_0 (2/(1 + cos(theta)))^alpha
-
-    Parameters
-    ----------
-    parameters : TYPE
-        DESCRIPTION.
-    coordinates : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    r : TYPE
-        DESCRIPTION.
-
-    """
-    if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
-    #rho, phi, ell = coordinates
-    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
-    t, p, p_dyn = coordinates
-    r0, r1, r2, r3, a0, a1, a2 = parameters
-    
-    # with np.errstate(invalid='raise'):
-    #     try: 
-    #         r_0 = r0*(p_dyn**r1)
-    #     except RuntimeError():
-    #         print('You caught the error!')
-    
-    
-    r_0 = (r0 + r1*(np.sign(np.sin(p))/2 + 1/2) + r2*(-(np.sign(np.sin(p))/2 - 1/2)) ) * ((p_dyn)**r3)
-    
-    a_0 = (a0 + a1*(np.sign(np.sin(p))/2 + 1/2) + a2*(-np.sign(np.sin(p))/2 - 1/2) )# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
-    
-    r = r_0 * (2/(1 + np.cos(t)))**a_0
-    
-    return r
-
-def Shuelike_Square(parameters=[], coordinates=[], variables=False):
-    """
-    r = r_0 (2/(1 + cos(theta)))^alpha
-
-    Parameters
-    ----------
-    parameters : TYPE
-        DESCRIPTION.
-    coordinates : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    r : TYPE
-        DESCRIPTION.
-
-    """
-    if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
-    #rho, phi, ell = coordinates
-    #r, t, p = convert_CylindricalSolarToSphericalSolar(*coordinates)
-    t, p, p_dyn = coordinates
-    r0, r1, a0, a1, a2, a3, a4 = parameters
-    
-    # with np.errstate(invalid='raise'):
-    #     try: 
-    #         r_0 = r0*(p_dyn**r1)
-    #     except RuntimeError():
-    #         print('You caught the error!')
-    r_0 = r0*((p_dyn/0.003)**r1)
-    
-    a_0 = (a0 + a1 * p_dyn**a2) * (1 + a3*np.sign(np.sin(p)+1)*np.sin(p) + a4*np.sign(np.sin(-p)+1)*np.sin(-p))
-    
-    r = r_0 * (2/(1 + np.cos(t)))**a_0
-    #rho, phi, ell = convert_SphericalSolarToCylindricalSolar(r, t, p)
-    
-    #rho = np.interp(coordinates[2], ell, rho, left=np.nan, right=np.nan)
-    
-    return r
-
 
 def Joylike(parameters=[], coordinates=[], variables=False):
     """
@@ -549,29 +438,129 @@ def boundary_Caternary():
 # =============================================================================
 # 
 # =============================================================================
-def explore_Variation(form, ranges):
-    import matplotlib.pyplot as plt
+def explore_Variation(model_name):
     
-    naxs = len(ranges)
-    nrows = int(np.floor(np.sqrt(naxs)))
-    ncols = int(np.ceil(naxs / nrows))
-    
-    fig, axs = plt.subplots(figsize=(6,4), nrows=nrows, ncols=ncols)
-    
-    t = np.linspace(0, 180, 1000) * np.pi/180.
-    p = np.zeros(1000)
-    p_dyn = np.zeros(1000) + 0.01
-    
-    for i in range(naxs):
-        
-        test_param_values = np.linspace(ranges[i], 5)
-        for test_param_value in test_param_values:
-            r = form([test_param_value, ])
-            
-        axs[i].plot
+    model_dict = init(model_name)
     
     
     breakpoint()
+    # Draw samples to give a sense of the model spread:
+    posterior_params_samples = az.extract(posterior, num_samples=100)
+    
+    posterior_params_mean = []
+    posterior_params_vals = []
+    for param_name in model_dict['param_distributions'].keys():
+        
+        # Get mean values for each parameter
+        posterior_params_mean.append(np.mean(posterior[param_name].values))
+        
+        # And record the sample values
+        posterior_params_vals.append(posterior_params_samples[param_name].values)
+    
+    # Transpose so we get a list of params in proper order
+    posterior_params_vals = np.array(posterior_params_vals).T
+        
+    # Plotting coords
+    n_coords = int(1e4)
+    mean_p_dyn = np.mean(positions_df['p_dyn'])
+    
+    t_coord = np.linspace(0, 0.99*np.pi, n_coords)
+    
+    p_coords = {'North': np.full(n_coords, 0),
+                'South': np.full(n_coords, +np.pi),
+                'Dawn': np.full(n_coords, +np.pi/2.),
+                'Dusk': np.full(n_coords, -np.pi/2.)
+                }
+    
+    p_dyn_coords = {'16': np.full(n_coords, np.percentile(positions_df['p_dyn'], 16)),
+                    '50': np.full(n_coords, np.percentile(positions_df['p_dyn'], 50)),
+                    '84': np.full(n_coords, np.percentile(positions_df['p_dyn'], 84))
+                    }
+    
+    fig, axs = plt.subplots(nrows = 3, sharex = True,
+                            figsize = (6.5, 5))
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.7, top=0.98,
+                        hspace=0.08)
+    
+    # Set up each set of axes
+    # x_label_centered_x = (axs[0].get_position()._points[0,0] + axs[0].get_position()._points[1,0])/2.
+    # x_label_centered_y = (0 + axs[1].get_position()._points[0,1])/2.
+    # fig.supxlabel(r'$x_{JSS}$ [$R_J$] (+ toward Sun)', 
+    #               position = (x_label_centered_x, x_label_centered_y),
+    #               ha = 'center', va = 'top')
+    # y_label_centered_x = (0 + axs[0].get_position()._points[0,0])/2.
+    # y_label_centered_y = (axs[0].get_position()._points[1,1] + axs[1].get_position()._points[0,1])/2.
+    # fig.supylabel(r'$\rho_{JSS} = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]', 
+    #               position = (y_label_centered_x, y_label_centered_y),
+    #               ha = 'right', va = 'center')
+    
+    axs[0].set(xlim = (300, -600),
+               ylim = (-200, 200),
+               aspect = 1)
+    axs[1].set(ylim = (-200, 200),
+               aspect = 1)
+    axs[2].set(ylim = (0, 400),
+               aspect = 1)
+    
+    axs[0].annotate('(a)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
+    axs[1].annotate('(b)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
+    axs[2].annotate('(c)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
+    
+    direction_colors = {'North': 'C0',
+                        'South': 'C1',
+                        'Dawn': 'C3',
+                        'Dusk': 'C5'}
+    p_dyn_linestyles = {'16': ':',
+                        '50': '-',
+                        '84': '--'}
+
+    # Top axes: Side-view, dusk on bottom
+    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['Dusk'], p_dyn_coords['50']])
+    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dusk'])
+    axs[0].plot(xyz[0], xyz[1], color='black')
+    
+    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['Dawn'], p_dyn_coords['50']])
+    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dawn'])
+    axs[0].plot(xyz[0], xyz[1], color='black')
+    
+    for params in posterior_params_vals:
+        r_coord = model_dict['model'](params, [t_coord, p_coords['Dusk'], p_dyn_coords['50']])
+        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dusk'])
+        axs[0].plot(xyz[0], xyz[1], color='black', alpha=0.05, zorder=-10)
+        
+        r_coord = model_dict['model'](params, [t_coord, p_coords['Dawn'], p_dyn_coords['50']])
+        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['Dawn'])
+        axs[0].plot(xyz[0], xyz[1], color='black', alpha=0.05, zorder=-10)
+    
+    # Middle axes: Top-down view
+    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['North'], p_dyn_coords['50']])
+    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['North'])
+    axs[1].plot(xyz[0], xyz[2], color='black')
+    
+    r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords['South'], p_dyn_coords['50']])
+    xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['South'])
+    axs[1].plot(xyz[0], xyz[2], color='black')
+    
+    for params in posterior_params_vals:
+        r_coord = model_dict['model'](params, [t_coord, p_coords['North'], p_dyn_coords['50']])
+        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['North'])
+        axs[1].plot(xyz[0], xyz[2], color='black', alpha=0.05, zorder=-10)
+        
+        r_coord = model_dict['model'](params, [t_coord, p_coords['South'], p_dyn_coords['50']])
+        xyz = BM.convert_SphericalSolarToCartesian(r_coord, t_coord, p_coords['South'])
+        axs[1].plot(xyz[0], xyz[2], color='black', alpha=0.05, zorder=-10)
+    
+    # Bottom axes: plot for different pressures, superimposed
+    for p_dyn_value in p_dyn_coords.keys():
+        for direction in ['North', 'South', 'Dawn', 'Dusk']:
+            
+            r_coord = model_dict['model'](posterior_params_mean, [t_coord, p_coords[direction], p_dyn_coords[p_dyn_value]])
+            rpl = BM.convert_SphericalSolarToCylindricalSolar(r_coord, t_coord, p_coords[direction])
+            axs[2].plot(rpl[2], rpl[0],
+                        color = direction_colors[direction], ls = p_dyn_linestyles[p_dyn_value],
+                        label = r'{}, $p_{{dyn}} = {}^{{th}} \%ile$'.format(direction, p_dyn_value))
+            
+            axs[2].legend()
     
     return
 
