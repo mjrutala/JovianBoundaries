@@ -65,17 +65,17 @@ def convert_CrossingsToRegions(df, resolution = '60Min', padding = None):
     """
         
     if padding == None:
-        padding = dt.timedelta(hours=0)
-    if type(padding) != dt.timedelta:
+        padding = [dt.timedelta(hours=0), dt.timedelta(hours=0)]
+    if type(padding[0]) != dt.timedelta:
         breakpoint()
     
     df['notes'] = df['notes'].fillna('null')
     
     # Create a new dataframe with the desired resolution
     loc_columns = ['region', 'region_num', 'SW', 'SH', 'MS', 'UN', 
-                   'notes', 'source']
-    loc_index = pd.date_range(start = df.index[0].floor(resolution) - padding,
-                              end = df.index[-1].ceil(resolution) + padding,
+                   'notes', 'source', 'spacecraft']
+    loc_index = pd.date_range(start = df.index[0].floor(resolution) - padding[0],
+                              end = df.index[-1].ceil(resolution) + padding[1],
                               freq = resolution)
     region_df = pd.DataFrame(columns = loc_columns, index = loc_index)
     
@@ -88,12 +88,13 @@ def convert_CrossingsToRegions(df, resolution = '60Min', padding = None):
             region_df.loc[region_df.query("index < @time").index, 'region'] = row['origin']
             region_df.loc[region_df.query("index < @time").index, 'notes'] = row['notes']
             region_df.loc[region_df.query("index < @time").index, 'source'] = row['source']
+            region_df.loc[region_df.query("index < @time").index, 'spacecraft'] = row['spacecraft']
             
         region_df.loc[region_df.query("index >= @time").index, 'region'] = row['destination']
         #   Assign the notes and sources in the same way
         region_df.loc[region_df.query("index >= @time").index, 'notes'] = row['notes']
         region_df.loc[region_df.query("index >= @time").index, 'source'] = row['source']
-       
+        region_df.loc[region_df.query("index >= @time").index, 'spacecraft'] = row['spacecraft']
     # Assign regions
     for region in ['SW', 'SH', 'MS', 'UN']:
         region_df.loc[:, region] = 0
@@ -167,7 +168,7 @@ def convert_BoundariesToCrossings(df):
     #   For the time being, remove partial crossings
     df = df.query("direction == 'in' | direction == 'out'")
     
-    return df[['origin', 'destination', 'notes', 'source']]
+    return df[['origin', 'destination', 'notes', 'source', 'spacecraft']]
 
 # =============================================================================
 # Routines which read .csv files and return a DataFrame in the preferred format
@@ -190,9 +191,10 @@ def read_Bame1992_CrossingList(mp=False, bs=True):
     #   Add required columns
     crossing_df['notes'] = ''
     crossing_df['source'] = 'Bame+ (1992)'
+    crossing_df['spacecraft'] = 'Ulysses'
         
     #   Drop unneeded columns
-    crossing_df = crossing_df[['origin', 'destination', 'notes', 'source']]
+    crossing_df = crossing_df[['origin', 'destination', 'notes', 'source', 'spacecraft']]
     
     return crossing_df
 
@@ -209,8 +211,9 @@ def read_Galileo_CrossingList():
     crossing_df = crossing_df.sort_index()
     
     #   Add required columns
-    crossing_df['notes'] = crossing_df['issues'].fillna('') + crossing_df['inferred'].fillna('')
+    crossing_df['notes'] = crossing_df['instrument'].fillna('') + '; ' + crossing_df['issues'].fillna('') + crossing_df['inferred'].fillna('')
     crossing_df['source'] = 'Galileo Spreadsheet'
+    crossing_df['spacecraft'] = 'Galileo'
     
     # if mp == True:
     #     crossing_df = crossing_df.query("origin == 'MS' | destination == 'MS'")
@@ -218,7 +221,7 @@ def read_Galileo_CrossingList():
     #     crossing_df = crossing_df.query("origin == 'SW' | destination == 'SW'")
         
     #   Drop unneeded columns
-    crossing_df = crossing_df[['origin', 'destination', 'notes', 'source']]
+    crossing_df = crossing_df[['origin', 'destination', 'notes', 'source', 'spacecraft']]
     
     return crossing_df
 
@@ -241,6 +244,7 @@ def read_Achilleos2004_CrossingList(bs=True):
     boundary_df['boundary'] = 'bow shock'
     boundary_df['notes'] = ''
     boundary_df['source'] = 'Achilleos+ (2004)'
+    boundary_df['spacecraft'] = 'Cassini'
     
     #   Convert from Boundaries to Crossings
     crossing_df = convert_BoundariesToCrossings(boundary_df)
@@ -265,6 +269,7 @@ def read_Louis2023_CrossingList(stoptime = None):
     boundary_df.index = [dt.datetime.strptime(row['date']+'T'+row['time'], '%Y/%m/%dT%H:%M') for index, row in boundary_df.iterrows()]
     boundary_df = boundary_df.sort_index()
     boundary_df['source'] = 'Louis+ (2023)' # Keep track of the source
+    boundary_df['spacecraft'] = 'Juno'
 
     #   Convert from Boundaries to Crossings
     crossing_df = convert_BoundariesToCrossings(boundary_df)
@@ -536,28 +541,30 @@ def convert_BoundaryList_to_CrossingList(boundary_df):
     
     return crossing_df    
     
-def read_AllCrossings(res='10Min', 
+def read_AllCrossings(resolution='10Min', 
                       padding=dt.timedelta(hours=100)):
+    
+    symmetrical_padding = [padding, padding]
+    asymmetrical_padding = [padding, dt.timedelta(hours=0)]
     
     # Load Ulysses crossings
     ulysses_crossings = read_Bame1992_CrossingList()
-    ulysses_regions = convert_CrossingsToRegions(ulysses_crossings, res, padding)
+    ulysses_regions = convert_CrossingsToRegions(ulysses_crossings, resolution, symmetrical_padding)
     ulysses_positions = get_SpacecraftPositions(ulysses_regions, 'Ulysses')
     
-   
     # Load Galileo crossings
     galileo_crossings = read_Galileo_CrossingList()
-    galileo_regions = convert_CrossingsToRegions(galileo_crossings, res)
+    galileo_regions = convert_CrossingsToRegions(galileo_crossings, resolution, asymmetrical_padding)
     galileo_positions = get_SpacecraftPositions(galileo_regions, 'GLL')
     
     # Load Cassini crossings
     cassini_crossings = read_Achilleos2004_CrossingList()
-    cassini_regions = convert_CrossingsToRegions(cassini_crossings, res, padding)
+    cassini_regions = convert_CrossingsToRegions(cassini_crossings, resolution, symmetrical_padding)
     cassini_positions = get_SpacecraftPositions(cassini_regions, 'Cassini')
     
     # Load Juno crossings 
     juno_crossings = read_Louis2023_CrossingList(stoptime = dt.datetime(2021,7,1))
-    juno_regions = convert_CrossingsToRegions(juno_crossings, res)
+    juno_regions = convert_CrossingsToRegions(juno_crossings, resolution, asymmetrical_padding)
     juno_positions = get_SpacecraftPositions(juno_regions, 'Juno')
     
     positions_list = [ulysses_positions,
@@ -566,6 +573,7 @@ def read_AllCrossings(res='10Min',
                       juno_positions]
     
     df = pd.concat(positions_list)
+    df = df.sort_index(axis='index')
     
     return df
     
@@ -573,17 +581,17 @@ def read_AllCrossings(res='10Min',
 def plot_CrossingsAndTrajectories():
     import matplotlib.pyplot as plt
     
-    padding = dt.timedelta(hours=100) # Only for flybys
+    padding = dt.timedelta(hours=1000) # Only for flybys
     res = '10Min' # lower resolution than what we actually use, otherwise slow?
     
     #   Load Ulysses data
     ulysses_crossings = read_Bame1992_CrossingList()
-    ulysses_regions = convert_CrossingsToRegions(ulysses_crossings, res, padding)
+    ulysses_regions = convert_CrossingsToRegions(ulysses_crossings, res, [padding, padding])
     ulysses_positions = get_SpacecraftPositions(ulysses_regions, 'Ulysses')
     
     #   Load Cassini data
     cassini_crossings = read_Achilleos2004_CrossingList()
-    cassini_regions = convert_CrossingsToRegions(cassini_crossings, res, padding)
+    cassini_regions = convert_CrossingsToRegions(cassini_crossings, res, [padding, padding])
     cassini_positions = get_SpacecraftPositions(cassini_regions, 'Cassini')
     
     galileo_crossings = read_Galileo_CrossingList()
@@ -591,11 +599,184 @@ def plot_CrossingsAndTrajectories():
     galileo_positions = get_SpacecraftPositions(galileo_regions, 'GLL')
     
     juno_crossings = read_Louis2023_CrossingList(stoptime = dt.datetime(2021,7,1))
-    juno_regions = convert_CrossingsToRegions(juno_crossings, res)
+    juno_regions = convert_CrossingsToRegions(juno_crossings, res, [padding, dt.timedelta(hours=0)])
     juno_positions = get_SpacecraftPositions(juno_regions, 'Juno')
     
+    # Set up colors
+    region_colors = {'UN': 'xkcd:gray',
+                     'SW': 'xkcd:pale orange',
+                     'SH': 'xkcd:turquoise',
+                     'MS': 'xkcd:magenta'}
+    positions_list = [ulysses_positions,
+                      galileo_positions,
+                      cassini_positions,
+                      juno_positions]
+    all_positions = pd.concat(positions_list)
     
+    rbin_step = 20
+    rbins = np.arange(0, 320, rbin_step)
+    abin_step = 2*np.pi/48
+    abins = np.arange(0, 2*np.pi + abin_step, abin_step)
     
+    z_limit = [-50,50]
+    
+    # hist, _, _ = np.histogram2d(juno_positions['t'], juno_positions['r'], bins = (abins, rbins))
+    A, R = np.meshgrid(abins, rbins)
+    
+    all_positions['a_LST'] = (all_positions['t'] * np.sign(all_positions['y'])) + np.pi
+    equatorial_positions = all_positions.query("@z_limit[0] <= z <= @z_limit[1]")
+    
+    shape = np.array(np.shape(A)) - 1
+    SW_res = np.zeros(shape) - 1
+    SH_res = np.zeros(shape) - 1
+    MS_res = np.zeros(shape) - 1
+    
+    for rbin_left in rbins[:-1]:
+        rbin_right = rbin_left + rbin_step
+        for abin_left in abins[:-1]:
+            abin_right = abin_left + abin_step
+            
+            qry = "@rbin_left <= r < @rbin_right & @abin_left <= a_LST < @abin_right"
+            
+            r_indx, a_indx = np.where((A == abin_left) & (R == rbin_left))
+            
+            #   How many total measurements are in this bin?
+            total_res = len(equatorial_positions.query(qry).query("UN == 0"))
+            
+            if total_res != 0:
+                
+                #   How many SW points are in this bin?
+                SW_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("SW == 1"))/total_res
+                
+                #   How many SW points are in this bin?
+                SH_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("SH == 1"))/total_res
+                
+                #   How many SW points are in this bin?
+                MS_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("MS == 1"))/total_res
+     
+            
+    SW_res_masked = np.ma.masked_less(SW_res, 0)
+    SH_res_masked = np.ma.masked_less(SH_res, 0)
+    MS_res_masked = np.ma.masked_less(MS_res, 0)
+    
+    rbin_step = 20
+    rbins = np.arange(0, 320, rbin_step)
+    pbin_step = 2*np.pi/48
+    pbins = np.arange(-np.pi, np.pi + pbin_step, pbin_step)
+    x_limit = [-50,50]
+    
+    # hist, _, _ = np.histogram2d(juno_positions['t'], juno_positions['r'], bins = (abins, rbins))
+    P, R = np.meshgrid(pbins, rbins)
+    
+    meridional_positions = all_positions.query("@x_limit[0] <= x <= @x_limit[1]")
+    
+    shape = np.array(np.shape(P)) - 1
+    SW_res_xz = np.zeros(shape) - 1
+    SH_res_xz = np.zeros(shape) - 1
+    MS_res_xz = np.zeros(shape) - 1
+    
+    for rbin_left in rbins[:-1]:
+        rbin_right = rbin_left + rbin_step
+        for pbin_left in pbins[:-1]:
+            pbin_right = pbin_left + pbin_step
+            
+            qry = "@rbin_left <= r < @rbin_right & @pbin_left <= p < @pbin_right"
+            
+            r_indx, p_indx = np.where((P == pbin_left) & (R == rbin_left))
+            
+            #   How many total measurements are in this bin?
+            total_res = len(meridional_positions.query(qry).query("UN == 0"))
+            
+            if total_res != 0:
+                
+                #   How many SW points are in this bin?
+                SW_res_xz[r_indx, p_indx] = len(meridional_positions.query(qry).query("SW == 1"))/total_res
+                
+                #   How many SW points are in this bin?
+                SH_res_xz[r_indx, p_indx] = len(meridional_positions.query(qry).query("SH == 1"))/total_res
+                
+                #   How many SW points are in this bin?
+                MS_res_xz[r_indx, p_indx] = len(meridional_positions.query(qry).query("MS == 1"))/total_res
+     
+    SW_res_xz_masked = np.ma.masked_less(SW_res_xz, 0)
+    SH_res_xz_masked = np.ma.masked_less(SH_res_xz, 0)
+    MS_res_xz_masked = np.ma.masked_less(MS_res_xz, 0)
+    
+    cmap = plt.get_cmap('plasma')
+    cmap.set_bad('xkcd:light gray', alpha=0.5)
+    
+    fig, axs = plt.subplots(ncols=3, nrows=2, figsize = (6,5),
+                            subplot_kw={'projection':'polar'})
+    plt.subplots_adjust(left=0.12, bottom=0.04, right=0.96, top=0.78, 
+                        hspace=0.25, wspace=0.4)
+    
+    im = axs[0,0].pcolormesh(A, R, SW_res_masked, cmap=cmap, vmin=0, vmax=1)      
+    # axs[0,0].set_title('In the Solar Wind')
+    axs[0,0].annotate('In the Solar Wind', (0.5, 1.25), (0,0),
+                      'axes fraction', 'offset fontsize',
+                      rotation = 'horizontal', ha = 'center', va = 'center')
+    axs[0,0].annotate('Local Solar Time [Hours]', (-0.25,0.5), (0,0),
+                      'axes fraction', 'offset fontsize', 
+                      rotation = 'vertical', ha = 'center', va = 'center')
+    axs[1,0].annotate('Meridional Angle [$\circ$]', (-0.25,0.5), (0,0),
+                      'axes fraction', 'offset fontsize', 
+                      rotation = 'vertical', ha = 'center', va = 'center')
+    
+    axs[0,1].pcolormesh(A, R, SH_res_masked, cmap=cmap, vmin=0, vmax=1)     
+    # axs[0,1].set_title('In the Magnetosheath')
+    axs[0,1].annotate('In the Magnetosheath', (0.5, 1.25), (0,0),
+                      'axes fraction', 'offset fontsize',
+                      rotation = 'horizontal', ha = 'center', va = 'center')
+     
+    axs[0,2].pcolormesh(A, R, MS_res_masked, cmap=cmap, vmin=0, vmax=1)     
+    # axs[0,2].set_title('In the Magnetosphere')
+    axs[0,2].annotate('In the Magnetosphere', (0.5, 1.25), (0,0),
+                      'axes fraction', 'offset fontsize',
+                      rotation = 'horizontal', ha = 'center', va = 'center')
+
+    axs[1,0].pcolormesh(P, R, SW_res_xz_masked, cmap=cmap, vmin=0, vmax=1)      
+    
+    axs[1,1].pcolormesh(P, R, SH_res_xz_masked, cmap=cmap, vmin=0, vmax=1)     
+     
+    axs[1,2].pcolormesh(P, R, MS_res_xz_masked, cmap=cmap, vmin=0, vmax=1)     
+
+    for ax in axs.flatten():
+        ax.tick_params(axis='x', which='major', pad=0)
+        ax.set_rlabel_position(-30)
+    for ax in axs[0].flatten():
+        ax.set(xticks = np.radians(np.arange(0, 360, 45)), 
+               xticklabels = ['{:02d}'.format(t) for t in np.roll(np.arange(0, 24, 3), 0)])
+    for ax in axs[1].flatten():
+        ax.set_theta_offset(np.pi/2.)
+    
+    cbar_ax = fig.add_axes([0.2, 0.9, 0.68, 0.04])
+    cbar = fig.colorbar(im, cax=cbar_ax, orientation='horizontal', ticklocation='bottom')
+    cbar_ax.set_title('Fraction of all Spacecraft Measurements')
+    
+    plt.show()
+
+    
+def orbital_plots():
+    padding = dt.timedelta(hours=1000) # Only for flybys
+    res = '10Min' # lower resolution than what we actually use, otherwise slow?
+    
+    #   Load Ulysses data
+    ulysses_crossings = read_Bame1992_CrossingList()
+    ulysses_regions = convert_CrossingsToRegions(ulysses_crossings, res, [padding, padding])
+    ulysses_positions = get_SpacecraftPositions(ulysses_regions, 'Ulysses')
+    
+    #   Load Cassini data
+    cassini_crossings = read_Achilleos2004_CrossingList()
+    cassini_regions = convert_CrossingsToRegions(cassini_crossings, res, [padding, padding])
+    cassini_positions = get_SpacecraftPositions(cassini_regions, 'Cassini')
+    
+    galileo_crossings = read_Galileo_CrossingList()
+    galileo_regions = convert_CrossingsToRegions(galileo_crossings, res)
+    galileo_positions = get_SpacecraftPositions(galileo_regions, 'GLL')
+    
+    juno_crossings = read_Louis2023_CrossingList(stoptime = dt.datetime(2021,7,1))
+    juno_regions = convert_CrossingsToRegions(juno_crossings, res, [padding, dt.timedelta(hours=0)])
+    juno_positions = get_SpacecraftPositions(juno_regions, 'Juno')
     
     # Set up colors
     region_colors = {'UN': 'xkcd:gray',
@@ -674,89 +855,7 @@ def plot_CrossingsAndTrajectories():
                ylim = [-100, 100], 
                aspect=1)
     
-    plt.show()
-    
-    
-    
-    
-    rbins = np.arange(0, 300, 20)
-    rbin_step = 10
-    abins = np.linspace(0, 2*np.pi, 48)
-    abin_step = 2*np.pi/48
-    
-    z_limit = [10, 100]
-    
-    # hist, _, _ = np.histogram2d(juno_positions['t'], juno_positions['r'], bins = (abins, rbins))
-    A, R = np.meshgrid(abins, rbins)
-    
-    all_positions = pd.concat(positions_list)
-    all_positions['a_LST'] = (all_positions['t'] * np.sign(all_positions['y'])) + np.pi
-    equatorial_positions = all_positions.query("@z_limit[0] <= z <= @z_limit[1]")
-    
-    shape = np.array(np.shape(A)) - 1
-    SW_res = np.zeros(shape) - 1
-    SH_res = np.zeros(shape) - 1
-    MS_res = np.zeros(shape) - 1
-    
-    
-    for rbin_left in rbins[:-1]:
-        rbin_right = rbin_left + rbin_step
-        for abin_left in abins[:-1]:
-            abin_right = abin_left + abin_step
-            
-            qry = "@rbin_left <= r < @rbin_right & @abin_left <= a_LST < @abin_right"
-            
-            r_indx, a_indx = np.where((A == abin_left) & (R == rbin_left))
-            
-            #   How many total measurements are in this bin?
-            total_res = len(equatorial_positions.query(qry).query("UN == 0"))
-            
-            if total_res != 0:
-                
-                #   How many SW points are in this bin?
-                SW_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("SW == 1"))/total_res
-                
-                #   How many SW points are in this bin?
-                SH_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("SH == 1"))/total_res
-                
-                #   How many SW points are in this bin?
-                MS_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("MS == 1"))/total_res
-     
-            
-    SW_res_masked = np.ma.masked_less(SW_res, 0)
-    SH_res_masked = np.ma.masked_less(SH_res, 0)
-    MS_res_masked = np.ma.masked_less(MS_res, 0)
-    
-    cmap = plt.get_cmap('plasma')
-    cmap.set_bad('xkcd:gray')
-    
-    
-    fig, axs = plt.subplots(ncols=3, figsize = (8,4),
-                            subplot_kw={'projection':'polar'})
-    plt.subplots_adjust(wspace=0.5)
-    
-    im = axs[0].pcolormesh(A, R, SW_res_masked, cmap=cmap, vmin=0, vmax=1)      
-    axs[0].set_title('Solar Wind Fraction')
-    
-    axs[1].pcolormesh(A, R, SH_res_masked, cmap=cmap, vmin=0, vmax=1)     
-    axs[1].set_title('Magnetosheath Fraction')
-     
-    axs[2].pcolormesh(A, R, MS_res_masked, cmap=cmap, vmin=0, vmax=1)     
-    axs[2].set_title('Magnetosphere Fraction')
-
-    for ax in axs:
-        ax.set(xticks = np.radians(np.arange(0, 360, 45)), 
-               xticklabels = ['{:02d}:00'.format(t) for t in np.roll(np.arange(0, 24, 3), 0)])
-        ax.set_rlabel_position(-30)
-    
-    cbar_ax = fig.add_axes([0.2, 0.1, 0.6, 0.05])
-    fig.colorbar(im, cax=cbar_ax, orientation='horizontal', label='Fraction of spacecraft orbits in region')
-    
-    plt.show()
-    
-    breakpoint()
-    
-    
+    plt.show()    
 
 # def _plot():
     
