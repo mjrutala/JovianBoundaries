@@ -11,6 +11,28 @@ def find_JoyBowShock(p_dyn, x=False, y=False, z=False):
 def find_JoyMagnetopause(p_dyn, x=False, y=False, z=False):
     return find_JoyBoundaries(p_dyn, boundary='MP', x=x, y=y, z=z)
 
+def get_JoyParameters(boundary = 'BS'):
+    
+    #   Joy+ 2002 coefficients
+    match boundary.lower():
+        case ('bs' | 'bowshock' | 'bow shock'):
+            A0, A1 = -1.107, +1.591
+            B0, B1 = -0.566, -0.812
+            C0, C1 = +0.048, -0.059
+            D0, D1 = +0.077, -0.038
+            E0, E1 = -0.874, -0.299
+            F0, F1 = -0.055, +0.124
+        case ('mp' | 'magnetopause'):
+            A0, A1 = -0.134, +0.488
+            B0, B1 = -0.581, -0.225
+            C0, C1 = -0.186, -0.016
+            D0, D1 = -0.014, +0.096
+            E0, E1 = -0.814, -0.811
+            F0, F1 = -0.050, +0.168
+        case _:
+            return
+        
+    return A0, A1, B0, B1, C0, C1, D0, D1, E0, E1, F0, F1
 
 def get_JoyCoefficients(p=0, boundary='BS', function=False):
     
