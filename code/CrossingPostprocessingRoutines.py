@@ -21,7 +21,7 @@ from sklearn.metrics import confusion_matrix
 import BoundaryForwardModeling as BFM
 import BoundaryModels as BM
 import JoyBoundaryCoords as JBC
-import CrossingPreprocessingRoutines as CPR
+import CrossingPreprocessingRoutines as preproc
 
 import sys
 sys.path.append('/Users/mrutala/projects/MMESH/mmesh/')
@@ -36,7 +36,7 @@ except:
 # Things that could be function arguments
 resolution = '10Min'
 end_date = '2018-08-01 00:00:00'
-delta_around_crossing = pd.Timedelta(hours=500)
+# delta_around_crossing = pd.Timedelta(hours=500)
 
 sc_colors = {'Ulysses': '#910951', 
              'Galileo': '#b6544a', 
@@ -125,9 +125,11 @@ def find_BoundarySurfaceLimits(df, boundary, spacecraft_to_use):
     return params
 
 def PostprocessCrossings(boundary = 'BS', 
-                         spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']):
+                         spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno'],
+                         delta_around_crossing = dt.timedelta(hours=500),
+                         other_fraction = 0.2):
     # Read Crossings
-    positions_df = CPR.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=1000))
+    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = delta_around_crossing*2)
     positions_df = positions_df.query("spacecraft in @spacecraft_to_use")
     # Replace datetime index with integers, deal with duplicated rows later
     positions_df = positions_df.reset_index(names='datetime')
@@ -249,10 +251,11 @@ def PostprocessCrossings(boundary = 'BS',
 
 def plot_UpperLowerLimits_Spatial():
     
-    spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
+    spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']   
+    resolution = '1Min'
     
     # Read Crossings
-    positions_df = CPR.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=3000))
+    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=3))
     positions_df = positions_df.query("spacecraft in @spacecraft_to_use")
     # Replace datetime index with integers, deal with duplicated rows later
     positions_df = positions_df.reset_index(names='datetime')
@@ -322,7 +325,7 @@ def plot_UpperLowerLimits_Spatial():
                 boundary_exits_index = (subset_df['MS'].shift(1) == 1) & (subset_df['MS'] == 0)
                 outside_mask = (subset_df['SW'] == 1) | (subset_df['SH'] == 1)
                 inside_mask = subset_df['MS'] == 1
-            
+            breakpoint()
             # Make DataFrames with NaNs where not in region, to make plotting easy
             inside_df = subset_df[['spacecraft', 'rho', 'phi', 'ell']]
             inside_df.loc[~inside_mask, ['rho', 'phi', 'ell']] = np.nan
@@ -398,13 +401,150 @@ def plot_UpperLowerLimits_Spatial():
                 dpi=300)
     plt.show()
     
+    breakpoint()
+    
 def plot_UpperLowerLimits_Temporal():
     
     breakpoint()
+def plot_Crossings():
+    
+    # spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
+    spacecraft_to_use = ['Galileo', 'Juno']    
+    
+    # Read Crossings
+    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=3000))
+    positions_df = positions_df.query("spacecraft in @spacecraft_to_use")
+    # Replace datetime index with integers, deal with duplicated rows later
+    positions_df = positions_df.reset_index(names='datetime')
+    
+    # 
+    fig, axs = plt.subplots(nrows = 2, ncols = 2,
+                            figsize = (6.5, 5))
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.7, top=0.98,
+                        hspace=0.08, wspace = 0.4)
 
+    for ax in axs:
+        ax[0].set(xlabel = r'$x_{JSS}$ (+ Sunward)', xlim = (-150, +150), 
+                  ylabel = r'$z_{JSS}$ (+ Northward)', ylim = (-75, +75), aspect = 2)
+        ax[1].set(xlabel = r'$x_{JSS}$ (+ Sunward)', xlim = (-250, +250), 
+                  ylabel = r'$y_{JSS}$ (+ Duskward)', ylim = (-250, +250), aspect = 1)
 
+    #   Dummy coords for plotting
+    t_plot = np.linspace(0, 0.995*np.pi, 1000)
+    p_plot = np.zeros(1000) + np.pi/2
+    p_dyn_plot = np.zeros(1000)
+    coords_plot = (t_plot, p_plot, p_dyn_plot)
+    
+    for ax, boundary in zip(axs, ['BS', 'MP']):
 
-def balance_Classes(df, boundary, delta):
+        # Plot orbital trajectories for each spacecraft individually
+        for spacecraft in spacecraft_to_use:
+            
+            subset_df = positions_df.query('spacecraft == @spacecraft')
+            
+            if boundary == 'BS':
+                boundary_entries_index = (subset_df['SW'].shift(1) == 1) & (subset_df['SW'] == 0)
+                boundary_exits_index = (subset_df['SW'].shift(1) == 0) & (subset_df['SW'] == 1)
+                outside_mask = subset_df['SW'] == 1
+                inside_mask = (subset_df['SH'] == 1) | (subset_df['MS'] == 1)
+            elif boundary == 'MP':
+                boundary_entries_index = (subset_df['MS'].shift(1) == 0) & (subset_df['MS'] == 1)
+                boundary_exits_index = (subset_df['MS'].shift(1) == 1) & (subset_df['MS'] == 0)
+                outside_mask = (subset_df['SW'] == 1) | (subset_df['SH'] == 1)
+                inside_mask = subset_df['MS'] == 1
+            
+            # Make DataFrames with NaNs where not in region, to make plotting easy
+            inside_df = subset_df.copy(deep=True)
+            inside_df.loc[~inside_mask, ['rho', 'phi', 'ell']] = np.nan
+            
+            outside_df = subset_df.copy(deep=True)
+            outside_df.loc[~outside_mask, ['rho', 'phi', 'ell']] = np.nan
+
+            # Ensure that we don't flip back and forth between coincident spacecraft
+            ax[0].plot(inside_df.query("spacecraft == @spacecraft")['x'],
+                    inside_df.query("spacecraft == @spacecraft")['z'],
+                    # label = '',
+                    color = sc_colors[spacecraft], lw = 0.5, ls = '--',
+                       zorder = 9)
+            ax[0].plot(outside_df.query("spacecraft == @spacecraft")['x'],
+                    outside_df.query("spacecraft == @spacecraft")['z'],
+                    label = '{}'.format(spacecraft),
+                    color = sc_colors[spacecraft], lw = 0.5, ls = '-',
+                    zorder = 9)
+            ax[1].plot(inside_df.query("spacecraft == @spacecraft")['x'],
+                    inside_df.query("spacecraft == @spacecraft")['y'],
+                    # label = '',
+                    color = sc_colors[spacecraft], lw = 0.5, ls = '--',
+                       zorder = 9)
+            ax[1].plot(outside_df.query("spacecraft == @spacecraft")['x'],
+                    outside_df.query("spacecraft == @spacecraft")['y'],
+                    label = '{}'.format(spacecraft),
+                    color = sc_colors[spacecraft], lw = 0.5, ls = '-',
+                    zorder = 9)
+            
+            # Crossings
+            crossing_regions = ['SW', 'SH'] if boundary == 'BS' else ['SH', 'MS']
+            label_str = r'{0} $\rightarrow$ {1}'.format(*crossing_regions)
+            ax[0].scatter(subset_df.loc[boundary_entries_index, 'x'], 
+                       subset_df.loc[boundary_entries_index, 'z'],
+                       label = label_str if spacecraft == spacecraft_to_use[-1] else '',
+                       s = 16, color='#0001a7', marker='x', lw = 0.5,
+                       zorder = 10)
+            ax[1].scatter(subset_df.loc[boundary_entries_index, 'x'], 
+                       subset_df.loc[boundary_entries_index, 'y'],
+                       label = label_str if spacecraft == spacecraft_to_use[-1] else '',
+                       s = 16, color='#0001a7', marker='x', lw = 0.5,
+                       zorder = 10)
+            label_str = r'{1} $\rightarrow$ {0}'.format(*crossing_regions)
+            ax[0].scatter(subset_df.loc[boundary_exits_index, 'x'], 
+                       subset_df.loc[boundary_exits_index, 'z'],
+                       label = label_str if spacecraft == spacecraft_to_use[-1] else '',
+                       s = 16, edgecolor='#563ae2', facecolor='None', marker='o', lw = 0.5,
+                       zorder = 10)
+            ax[1].scatter(subset_df.loc[boundary_exits_index, 'x'], 
+                       subset_df.loc[boundary_exits_index, 'y'],
+                       label = label_str if spacecraft == spacecraft_to_use[-1] else '',
+                       s = 16, edgecolor='#563ae2', facecolor='None', marker='o', lw = 0.5,
+                       zorder = 10)
+    
+    for ax in axs.flatten():
+        leg = ax.legend(scatterpoints=3, handlelength=3,
+                        loc='lower right', fontsize = 'x-small')
+        for line in leg.get_lines():
+                line.set_linewidth(2.0)
+    
+    plt.show()
+    
+    breakpoint()
+
+def balance_Classes(df, boundary, delta, other_fraction=0.1):
+    """
+    Roughly balance the number of measurements inside and outside a 
+    magnetospheric boundary by choosing those +/- delta from each crossing
+    plus a specified fraction of all remaining measurements.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A DataFrame containing measurements with at least two columns: 
+        'datetime' for timestamps and either 'SW' for solar wind or 'MS' 
+        for magnetospheric state.
+    boundary : str
+        The type of magnetospheric boundary to consider, either 'bs' 
+        (bow shock) or 'mp' (magnetopause).
+    delta : pd.Timedelta
+        The time window around each boundary crossing from which to select 
+        measurements.
+    other_fraction : float, optional
+        The fraction of remaining measurements to randomly include, default is 0.1.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A balanced DataFrame containing only the measurements within the 
+        specified boundaries and time windows, plus a random selection of 
+        additional measurements to achieve balance.
+    """
     
     if boundary.lower() in ['bs', 'bow shock']:
         crossings_bool = np.diff(df['SW'].to_numpy(), prepend=1) != 0
@@ -424,6 +564,12 @@ def balance_Classes(df, boundary, delta):
         balanced_arr += indx.to_numpy('int32')
     
     balanced_bool = balanced_arr > 0
+    
+    # Add in some remaining measurements
+    other_indx = np.argwhere(balanced_bool == False).flatten()
+    rng = np.random.default_rng()
+    to_add_indx = rng.choice(other_indx, int(0.1 * len(other_indx)), replace=False)
+    balanced_bool[to_add_indx] = True
     
     return df.loc[balanced_bool]
 
