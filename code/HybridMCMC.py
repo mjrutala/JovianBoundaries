@@ -16,6 +16,7 @@ import pytensor.tensor as pt
 import pandas as pd
 import datetime as dt
 import corner
+import pickle
 
 from pytensor.graph import Apply, Op
 import xarray
@@ -37,16 +38,16 @@ except:
     pass
 
 resolution = '10Min'
+spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
+boundary = 'MP'
 
-positions_df = postproc.PostprocessCrossings('BS', spacecraft_to_use = ['Ulysses', 'Cassini', 'Juno'])
-
-# Galileo binary search-- what causes our problems?
+positions_df = postproc.PostprocessCrossings(boundary, spacecraft_to_use = spacecraft_to_use)
 n = len(positions_df)
 
 positions_df = positions_df.query('r_upperbound < 1e3 & r_lowerbound < 1e3')
 
 # FOR TESTING, TO MAKE THE MCMC SAMPLER RUN FASTER
-# positions_df = positions_df.sample(frac=0.5, axis='rows')
+positions_df = positions_df.sample(frac=0.50, axis='rows', replace=False)
 
 from scipy.stats import skewnorm
 
@@ -75,9 +76,10 @@ if len(np.shape(test_pressure_draws)) < 2:
     test_pressure_draws = [test_pressure_draws]
 
 # Model and MCMC params
-model_name = 'Shuelike_AsymmetryCase1'
+model_name = 'Shuelike'
 model_dict = BM.init(model_name)
 model_number = model_dict['model_number']
+ndraws, nchains = 500, 3
 
 model_sigma_value = 5
 # mu_sigma_values = (10, 5)
@@ -106,8 +108,6 @@ for pressure_draw in test_pressure_draws:
         param_names = list(param_dict.keys())
         tracked_var_names = []
         for pname in param_names:
-            # tracked_var_names.extend([pname+'_mu', pname+'_sigma', pname]) # Do track combined param
-            # tracked_var_names.extend([pname+'_mu', pname+'_sigma']) # Don't track combined param
             tracked_var_names.append(pname)
         
         params = list(param_dict.values())
@@ -115,6 +115,12 @@ for pressure_draw in test_pressure_draws:
         
         # The predicted mean location of the boundary is a function of pressure
         mu_pred = pm.Deterministic("mu_pred", model_dict['model'](params, [t, p, p_dyn_obs]))
+        
+        # This section adds a penalty for creating a closed boundary (i.e., no open field lines)
+        if 'Shue' in model_name:
+            flare_a0, flare_a1 = param_dict['a0'], param_dict['a1']
+            flare_pred = pm.Deterministic("flare_pred", flare_a0 + flare_a1*p_dyn_obs)
+            closed_penalty = pm.Potential("closed_penalty", pm.math.switch(flare_pred < 0.5, -np.inf, 0))
         
         # The observed mean location will vary based on internal drivers
         # In a spherical coordinate system, the variation in r must increase with theta
@@ -138,14 +144,43 @@ for pressure_draw in test_pressure_draws:
         # # Track sigma in the sampler as well
         # tracked_var_names.extend(['sigma_m', 'sigma_b'])
         
-        sigma = pm.HalfNormal("sigma", sigma=10)
-        sigma_t = pm.HalfNormal("sigma_t", sigma = sigma * (2/(1 + np.cos(t))))
-        tracked_var_names.extend(['sigma'])
+        # sigma = pm.HalfNormal("sigma", sigma=10)
+        # sigma_t = pm.HalfNormal("sigma_t", sigma = sigma * (2/(1 + np.cos(t))))
         
-        likelihood = pm.Potential("likelihood", pm.logp(pm.Normal.dist(mu=mu_pred, sigma=sigma), value=r_obs))
+        fractional_sigma = 5
+        
+        if 'r0' in param_dict.keys():
+            sigma_param_dict = {}
+            for key in param_dict.keys():
+                if key in ['r0', 'r2', 'r3', 'r4', 'A0']:
+                    sigma_param_dict['sigma_'+key] = pm.HalfNormal('sigma_'+key, fractional_sigma)
+                    tracked_var_names.append('sigma_' + key)
+                # elif key in ['A0', 'B0', 'C0']:
+                #     sigma_param_dict['sigma_'+key] = pm.HalfNormal('sigma_'+key, fractional_sigma/120)
+                #     tracked_var_names.append('sigma_' + key)
+                else:
+                    sigma_param_dict['sigma_'+key] = param_dict[key]
+    
+            sigma_params = list(sigma_param_dict.values())
+            
+            # sigma_total = pm.HalfNormal("sigma_total", sigma = sigma_constant)
+            sigma_fn = pm.Deterministic("sigma_fn", model_dict['model'](sigma_params, [t, p, p_dyn_obs]))
+        else:
+            sigma_fn = pm.HalfNormal("sigma_fn", fractional_sigma)
+            tracked_var_names.append("sigma_fn")
+        
+        # sigma_total = pm.HalfNormal("sigma_total", sigma = 5)
+        
+        # tracked_var_names.extend(['sigma_dynamic'])
+        
+        # likelihood = pm.Potential("likelihood", pm.logp(pm.Normal.dist(mu=mu_pred, sigma=sigma_total), value=r_obs))
+        
+        # var = pm.Normal("var", 0, 1)
+        
+        likelihood = pm.Potential("likelihood", pm.logp(pm.Normal.dist(mu = mu_pred, sigma = sigma_fn), value=r_obs))
 
     with test_potential:
-        idata = pm.sample(tune=500, draws=500, chains=4, cores=3,
+        idata = pm.sample(tune=500, draws=ndraws, chains=nchains, cores=3,
                           var_names = tracked_var_names,
                           target_accept=0.95)
                           # init = 'adapt_diag+jitter') # prevents 'jitter', which might move points init vals around too much here
@@ -166,6 +201,16 @@ figure = corner.corner(posterior,
 figure.set_size_inches(8,8)
 plt.show()
 
+# Save the posterior
+posterior_filename = "boundary-{}_model-{}_sc-{}_res-{}_pdyndraws-{}-draws-{}_chains-{}"
+posterior_filename = posterior_filename.format(boundary, model_name, 
+                                               '-'.join(spacecraft_to_use), 
+                                               resolution, 
+                                               n_pressure_draws, 
+                                               ndraws, nchains)
+posterior_filepath = '/Users/mrutala/projects/JupiterBoundaries/posteriors/' + posterior_filename + '.pkl'
+with open(posterior_filepath, 'wb') as f:
+    pickle.dump(posterior, f)
 
 # =============================================================================
 #   Posterior predictive plots
