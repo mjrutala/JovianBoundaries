@@ -109,168 +109,100 @@ def init(model_name):
                                                      'a0': {'mu': 1, 'sigma': 0.5},
                                                      'a1': {'mu': 0, 'sigma': 1}}
                               }
-    # bm = {'Shuelike': 
-    #           {'model': Shuelike, 
-    #            'model_number': 1,
-    #            'param_dict': {},
-    #            'param_distributions': {
-    #                'r0': pm.InverseGamma,
-    #                'r1': pm.Normal,
-    #                'a0': pm.InverseGamma,
-    #                'a1': pm.Normal},
-    #            'param_descriptions': {
-    #                'r0': {'mu': 60, 'sigma': 30},
-    #                'r1': {'mu': 4, 'sigma': 1},
-    #                'a0': {'mu': 1, 'sigma': 0.5},
-    #                # 'a1': {'lower': "-1 * param_dict['a0']/p_dyn", 'upper': "2", 'EVAL_NEEDED':True}}
-    #                # 'a1': {'lower': "-1 * param_dict['a0']", 'upper': "1", 'EVAL_NEEDED':True}}
-    #                'a1': {'mu': 0, 'sigma':1}}
-    #            },
-    #       'Shuelike_AsymmetryCase1':
-    #           {'model': Shuelike_AsymmetryCase1, 
-    #            'model_number': 2,
-    #            'param_dict': {},
-    #            'param_distributions': {
-    #                'r0': pm.InverseGamma,
-    #                'r1': pm.Normal,
-    #                'r2': pm.Normal,
-    #                'a0': pm.InverseGamma,
-    #                'a1': pm.Uniform},
-    #            'param_descriptions': {
-    #                'r0': {'mu': 60, 'sigma': 30},
-    #                'r1': {'mu': -0.2, 'sigma': 0.05},
-    #                'r2': {'mu': -10, 'sigma': 10},
-    #                'a0': {'mu': 1.0, 'sigma': 0.5},
-    #                'a1': {'lower': -10, 'upper': 10}}
-    #            },
-    #       'Shuelike_AsymmetryCase1p5':
-    #           {'model': Shuelike_AsymmetryCase1p5, 
-    #            'model_number': 3,
-    #            'param_dict': {},
-    #            'param_distributions': {
-    #                'r0': pm.InverseGamma,
-    #                'r1': pm.Normal,
-    #                'r2': pm.Normal,
-    #                'a0': pm.InverseGamma,
-    #                'a1': pm.Uniform},
-    #            'param_descriptions': {
-    #                'r0': {'mu': 60, 'sigma': 30},
-    #                'r1': {'mu': -0.2, 'sigma': 0.05},
-    #                'r2': {'mu': -10, 'sigma': 10},
-    #                'a0': {'mu': 1.0, 'sigma': 0.5},
-    #                'a1': {'lower': -10, 'upper': 10}}
-    #              },
-    #       'Shuelike_AsymmetryCase2v1':
-    #           {'model': Shuelike_AsymmeryCase2v1, 
-    #            'model_number': 4,
-    #            'param_dict': {},
-    #            'param_distributions': {
-    #                'r0': pm.InverseGamma,
-    #                'r1': pm.Normal,
-    #                'r2': pm.Normal,
-    #                'r3': pm.Normal,
-    #                'a0': pm.InverseGamma,
-    #                'a1': pm.Normal},
-    #            'param_descriptions': {
-    #                'r0': {'mu': 60, 'sigma': 30},
-    #                'r1': {'mu': -0.2, 'sigma': 0.05},
-    #                'r2': {'mu': -10, 'sigma': 10},
-    #                'r3': {'mu': 0, 'sigma': 10},
-    #                'a0': {'mu': 1.0, 'sigma': 0.5},
-    #                'a1': {'mu': 0, 'sigma': 1}}
-    #              }, 
-    #       'Shuelike_AsymmetryCase2v2':
-    #             {'model': Shuelike_AsymmeryCase2v2, 
-    #              'model_number': 3,
-    #              'param_dict': {},
-    #              'param_distributions': {
-    #                  'r0': pm.InverseGamma,
-    #                  'r1': pm.Normal,
-    #                  'r2': pm.Normal,
-    #                  'r3': pm.Normal,
-    #                  'r4': pm.Normal,
-    #                  'a0': pm.InverseGamma,
-    #                  'a1': pm.Normal},
-    #              'param_descriptions': {
-    #                  'r0': {'mu': 60, 'sigma': 30},
-    #                  'r1': {'mu': -0.2, 'sigma': 0.05},
-    #                  'r2': {'mu': -10, 'sigma': 10},
-    #                  'r3': {'mu': 0, 'sigma': 10},
-    #                  'r4': {'mu': 0, 'sigma': 10},
-    #                  'a0': {'mu': 1.0, 'sigma': 0.5},
-    #                  'a1': {'mu': 0, 'sigma': 1}}
-    #                },
-    #        'Shuelike_AsymmetryCase2v3':
-    #            {'model': Shuelike_AsymmeryCase2v3, 
-    #             'model_number': 3,
-    #             'param_dict': {},
-    #             'param_distributions': {
-    #                 'r0': pm.InverseGamma,
-    #                 'r2': pm.Normal,
-    #                 'r3': pm.Normal,
-    #                 'r4': pm.Normal,
-    #                 'a0': pm.InverseGamma,
-    #                 'a1': pm.Normal},
-    #             'param_descriptions': {
-    #                 'r0': {'mu': 60, 'sigma': 30},
-    #                 'r2': {'mu': -10, 'sigma': 10},
-    #                 'r3': {'mu': 0, 'sigma': 10},
-    #                 'r4': {'mu': 0, 'sigma': 10},
-    #                 'a0': {'mu': 1.0, 'sigma': 0.5},
-    #                 'a1': {'mu': 0, 'sigma': 1}}
-    #             },
-    #        'Shuelike_AsymmetryCase3v1':
-    #            {'model': Shuelike_AsymmeryCase3v1, 
-    #             'model_number': 4,
-    #             'param_dict': {},
-    #             'param_distributions': {
-    #                 'r0': pm.InverseGamma,
-    #                 'r1': pm.Normal,
-    #                 'a0': pm.InverseGamma,
-    #                 'a1': pm.Normal,
-    #                 'a2': pm.Normal,
-    #                 'a3': pm.Normal},
-    #             'param_descriptions': {
-    #                 'r0': {'mu': 60, 'sigma': 30},
-    #                 'r1': {'mu': -0.2, 'sigma': 0.05},
-    #                 'a0': {'mu': 1.0, 'sigma': 0.5},
-    #                 'a1': {'mu': 0, 'sigma': 1},
-    #                 'a2': {'mu': 0, 'sigma': 1},
-    #                 'a3': {'mu': 0, 'sigma': 1}}
-    #          },
-    #         'Joylike':
-    #             {'model': Joylike, 
-    #              'model_number': 9,
-    #              'param_dict': {},
-    #              'param_distributions': {
-    #                  'A0': pm.Normal,
-    #                  'A1': pm.Normal,
-    #                  'B0': pm.Normal,
-    #                  'B1': pm.Normal,
-    #                  'C0': pm.Normal,
-    #                  'C1': pm.Normal,
-    #                  'D0': pm.Normal,
-    #                  'D1': pm.Normal,
-    #                  'E0': pm.Normal,
-    #                  'E1': pm.Normal,
-    #                  'F0': pm.Normal,
-    #                  'F1': pm.Normal},
-    #              'param_descriptions': {
-    #                  'A0': {'mu':-0.62, 'sigma':0.49},
-    #                  'A1': {'mu':+1.04, 'sigma':0.55},
-    #                  'B0': {'mu':-0.57, 'sigma':0.01},
-    #                  'B1': {'mu':-0.52, 'sigma':0.30},
-    #                  'C0': {'mu':-0.07, 'sigma':0.12},
-    #                  'C1': {'mu':+0.04, 'sigma':0.02},
-    #                  'D0': {'mu':+0.03, 'sigma':0.05},
-    #                  'D1': {'mu':+0.03, 'sigma':0.07},
-    #                  'E0': {'mu':-0.84, 'sigma':0.03},
-    #                  'E1': {'mu':-0.55, 'sigma':0.85},
-    #                  'F0': {'mu':-0.05, 'sigma':0.10},
-    #                  'F1': {'mu':+0.15, 'sigma':0.22}}
-    #              }  
-              
-    #       }
+    bm['Joylike'] = {'model': Joylike,
+                     'param_dict': {},
+                     'param_distributions': {'r1': pm.Normal,
+                                             'A0': pm.Normal,
+                                             'A1': pm.Normal,
+                                             'B0': pm.Normal,
+                                             'B1': pm.Normal,
+                                             'C0': pm.Normal,
+                                             'C1': pm.Normal,
+                                             'D0': pm.Normal,
+                                             'D1': pm.Normal,
+                                             'E0': pm.Normal,
+                                             'E1': pm.Normal,
+                                             'F0': pm.Normal,
+                                             'F1': pm.Normal},
+                     'param_descriptions': {'r1': {'mu': -0.25, 'sigma': 0.05},
+                                            'A0': {'mu':-0.62, 'sigma':0.49},
+                                            'A1': {'mu':+1.04, 'sigma':0.55},
+                                            'B0': {'mu':-0.57, 'sigma':0.01},
+                                            'B1': {'mu':-0.52, 'sigma':0.30},
+                                            'C0': {'mu':-0.07, 'sigma':0.12},
+                                            'C1': {'mu':+0.04, 'sigma':0.02},
+                                            'D0': {'mu':+0.03, 'sigma':0.05},
+                                            'D1': {'mu':+0.03, 'sigma':0.07},
+                                            'E0': {'mu':-0.84, 'sigma':0.03},
+                                            'E1': {'mu':-0.55, 'sigma':0.85},
+                                            'F0': {'mu':-0.05, 'sigma':0.10},
+                                            'F1': {'mu':+0.15, 'sigma':0.22}}
+                     }
+    bm['Joylike_r1fixed'] = {'model': Joylike_r1fixed,
+                             'param_dict': {},
+                             'param_distributions': {'A0': pm.Normal,
+                                                     'A1': pm.Normal,
+                                                     'B0': pm.Normal,
+                                                     'B1': pm.Normal,
+                                                     'C0': pm.Normal,
+                                                     'C1': pm.Normal,
+                                                     'D0': pm.Normal,
+                                                     'D1': pm.Normal,
+                                                     'E0': pm.Normal,
+                                                     'E1': pm.Normal,
+                                                     'F0': pm.Normal,
+                                                     'F1': pm.Normal},
+                             'param_descriptions': {'A0': {'mu':-0.62, 'sigma':0.49},
+                                                    'A1': {'mu':+1.04, 'sigma':0.55},
+                                                    'B0': {'mu':-0.57, 'sigma':0.01},
+                                                    'B1': {'mu':-0.52, 'sigma':0.30},
+                                                    'C0': {'mu':-0.07, 'sigma':0.12},
+                                                    'C1': {'mu':+0.04, 'sigma':0.02},
+                                                    'D0': {'mu':+0.03, 'sigma':0.05},
+                                                    'D1': {'mu':+0.03, 'sigma':0.07},
+                                                    'E0': {'mu':-0.84, 'sigma':0.03},
+                                                    'E1': {'mu':-0.55, 'sigma':0.85},
+                                                    'F0': {'mu':-0.05, 'sigma':0.10},
+                                                    'F1': {'mu':+0.15, 'sigma':0.22}}
+                     }
+    bm['Shuelike_rasymmetric'] = {'model': Shuelike_rasymmetric, 
+                                  'model_number': 3,
+                                  'param_dict': {},
+                                  'param_distributions': {'r0': pm.InverseGamma,
+                                                          'r1': pm.Normal,
+                                                          'r2': pm.Normal,
+                                                          'r3': pm.Normal,
+                                                          'r4': pm.Normal,
+                                                          'a0': pm.InverseGamma,
+                                                          'a1': pm.Normal},
+                                  'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                                                         'r1': {'mu': -0.2, 'sigma': 0.05},
+                                                         'r2': {'mu': -10, 'sigma': 10},
+                                                         'r3': {'mu': 0, 'sigma': 10},
+                                                         'r4': {'mu': 0, 'sigma': 10},
+                                                         'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                         'a1': {'mu': 0, 'sigma': 1}}
+                                  }
+    
+    bm['Shuelike_rasymmetric_r1fixed'] = {'model': Shuelike_rasymmetric_r1fixed, 
+                                          'model_number': 3,
+                                          'param_dict': {},
+                                          'param_distributions': {'r0': pm.InverseGamma,
+                                                                  'r1': pm.Normal,
+                                                                  'r2': pm.Normal,
+                                                                  'r3': pm.Normal,
+                                                                  'r4': pm.Normal,
+                                                                  'a0': pm.InverseGamma,
+                                                                  'a1': pm.Normal},
+                                          'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                                                                 'r1': {'mu': -0.2, 'sigma': 0.05},
+                                                                 'r2': {'mu': -10, 'sigma': 10},
+                                                                 'r3': {'mu': 0, 'sigma': 10},
+                                                                 'r4': {'mu': 0, 'sigma': 10},
+                                                                 'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                                 'a1': {'mu': 0, 'sigma': 1}}
+                                  }
+    
     return bm[model_name]
           
 # =============================================================================
@@ -388,6 +320,76 @@ def Shuelike_r1fixed(parameters=[], coordinates=[], variables=False,
     
     return r
 
+def Shuelike_rasymmetric(parameters=[], coordinates=[], variables=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    r0, r1, r2, r3, r4, a0, a1 = parameters
+    
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
+    
+    r_n = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
+    
+    a_f =  (a0 + a1 * p_dyn)
+    
+    r = r_n * (2/(1 + np.cos(t)))**a_f
+
+    return r
+
+def Shuelike_rasymmetric_r1fixed(parameters=[], coordinates=[], variables=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    r0, r2, r3, r4, a0, a1 = parameters
+    r1 = -0.25
+    
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
+    
+    r_n = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
+    
+    a_f =  (a0 + a1 * p_dyn)
+    
+    r = r_n * (2/(1 + np.cos(t)))**a_f
+
+    return r
+
+
 def Shuelike_AsymmetryCase1(parameters=[], coordinates=[], variables=False):
     """
     Shuelike, w/ Polar Flattening + dawn/dusk symmetry
@@ -484,75 +486,6 @@ def Shuelike_AsymmeryCase2v1(parameters=[], coordinates=[], variables=False):
 
     return r
 
-def Shuelike_AsymmeryCase2v2(parameters=[], coordinates=[], variables=False):
-    """
-    
-
-    Parameters
-    ----------
-    parameters : TYPE
-        DESCRIPTION.
-    coordinates : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    r : TYPE
-        DESCRIPTION.
-
-    """
-    if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
-    
-    t, p, p_dyn = coordinates
-    r0, r1, r2, r3, r4, a0, a1 = parameters
-    
-    sg_pos = (np.sign(np.sin(p)) + 1)/2
-    sg_neg = (np.sign(np.sin(p)) - 1)/2
-    
-    r_n = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
-    
-    a_f =  (a0 + a1 * p_dyn)
-    
-    r = r_n * (2/(1 + np.cos(t)))**a_f
-
-    return r
-
-def Shuelike_AsymmeryCase2v3(parameters=[], coordinates=[], variables=False):
-    """
-    
-
-    Parameters
-    ----------
-    parameters : TYPE
-        DESCRIPTION.
-    coordinates : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    r : TYPE
-        DESCRIPTION.
-
-    """
-    if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
-    
-    t, p, p_dyn = coordinates
-    r0, r2, r3, r4, a0, a1 = parameters
-    r1 = -0.25
-    
-    sg_pos = (np.sign(np.sin(p)) + 1)/2
-    sg_neg = (np.sign(np.sin(p)) - 1)/2
-    
-    r_n = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
-    
-    a_f =  (a0 + a1 * p_dyn)
-    
-    r = r_n * (2/(1 + np.cos(t)))**a_f
-
-    return r
-
 def Shuelike_AsymmeryCase3v1(parameters=[], coordinates=[], variables=False):
     """
     
@@ -608,14 +541,58 @@ def Joylike(parameters=[], coordinates=[], variables=False):
         return ('t', 'p', 'p_dyn'), 'r'
     
     t, p, p_dyn = coordinates
-    a0, a1, b0, b1, c0, c1, d0, d1, e0, e1, f0, f1 = parameters
+    r1, a0, a1, b0, b1, c0, c1, d0, d1, e0, e1, f0, f1 = parameters
     
     # x = x * 1/120
     # y = y * 1/120
     
-    a = a0 + a1*p_dyn**(-1/4)
-    b = b0 + b1*p_dyn**(-1/4)
-    c = c0 + c1*p_dyn**(-1/4)
+    a = a0 + a1*p_dyn**(r1)
+    b = b0 + b1*p_dyn**(r1)
+    c = c0 + c1*p_dyn**(r1)
+    d = d0 + d1*p_dyn
+    e = e0 + e1*p_dyn
+    f = f0 + f1*p_dyn
+    
+    A = c*np.cos(t)**2 + e*np.sin(t)**2*np.sin(p)**2 - f*np.sin(t)*np.cos(t)*np.sin(p) - np.sin(t)**2*np.cos(p)**2
+    B = b*np.cos(t) - d*np.sin(t)*np.sin(p)
+    C = a
+    
+    r = (-B - np.sqrt(B**2 - 4*A*C)) / (2*A)
+    
+    
+    return np.array(r) * 120
+
+
+def Joylike_r1fixed(parameters=[], coordinates=[], variables=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    z : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    a0, a1, b0, b1, c0, c1, d0, d1, e0, e1, f0, f1 = parameters
+    r1 = -1/4
+    
+    # x = x * 1/120
+    # y = y * 1/120
+    
+    a = a0 + a1*p_dyn**(r1)
+    b = b0 + b1*p_dyn**(r1)
+    c = c0 + c1*p_dyn**(r1)
     d = d0 + d1*p_dyn
     e = e0 + e1*p_dyn
     f = f0 + f1*p_dyn
