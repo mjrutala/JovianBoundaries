@@ -68,7 +68,7 @@ def find_BoundarySurfaceLimits(df, boundary, spacecraft_to_use):
         
         t_test = df.loc[outside_boundary_index, 't'].to_numpy()
         p_test = np.zeros(len(t_test))
-        p_dyn_test = np.zeros(len(t_test))
+        p_dyn_test = np.zeros(len(t_test)) + 0.1
         
         #   For the test coordinates, where the boundary surface r is located
         r_test = BM.Shuelike((standoff, 0, fixed_fb, 0), 
@@ -94,7 +94,7 @@ def find_BoundarySurfaceLimits(df, boundary, spacecraft_to_use):
         
         t_test = df.loc[inside_boundary_index, 't'].to_numpy()
         p_test = np.zeros(len(t_test))
-        p_dyn_test = np.zeros(len(t_test))
+        p_dyn_test = np.zeros(len(t_test)) + 0.1
         
         #   For the test coordinates, where the boundary surface r is located
         r_test = BM.Shuelike((standoff, 0, fixed_fb, 0), 
@@ -157,96 +157,6 @@ def PostprocessCrossings(boundary = 'BS',
     balanced_positions_df.loc[:, 'p_dyn_loc'] = p_dyn_mme.loc[balanced_positions_df['datetime'], 'p_dyn_loc'].to_numpy('float64')
     balanced_positions_df.loc[:, 'p_dyn_scale'] = p_dyn_mme.loc[balanced_positions_df['datetime'], 'p_dyn_scale'].to_numpy('float64')
     
-    #   Visualize
-    import matplotlib.dates as mdates
-    import matplotlib.ticker as mticker
-    
-    # Identify gaps in the timeseries
-    # This gives the index of the step BEFORE the bigger gap, you'll want to add one before subscripting the df
-    diffs_in_seconds = np.diff(balanced_positions_df['datetime']).astype('float64') * 1e-9
-    all_gaps = np.argwhere(diffs_in_seconds > 600).flatten() + 1
-    long_gaps = np.argwhere(diffs_in_seconds > 10*24*60*60).flatten() + 1
-    
-    width_ratios = np.diff(long_gaps, prepend=0, append=len(balanced_positions_df))
-    
-    fig, axs = plt.subplots(ncols = len(long_gaps)+1,
-                            nrows = 2,
-                            sharey='row',
-                            width_ratios = width_ratios,
-                            figsize = (10, 5),
-                            squeeze = False)
-    plt.subplots_adjust(left=0.1, bottom=0.1, right=0.985, top=0.975,
-                        hspace = 0.2, wspace = 0.15)
-    
-    spacecraft_color_dict = {'Ulysses': 'C0',
-                             'Galileo': 'C1',
-                             'Cassini': 'C3',
-                             'Juno': 'C5'}
-    # color_by_spacecraft = [spacecraft_color_dict[sc] for sc in positions_df['spacecraft']]
-    
-    # Top row: bow shocks
-    for start_indx, stop_indx, ax in zip(np.insert(long_gaps, 0, 0), np.append(long_gaps, len(balanced_positions_df)), axs[0]):
-        
-        subset_df = balanced_positions_df.iloc[start_indx:stop_indx]
-        
-        ax.fill_between(subset_df['datetime'], 
-                        subset_df['r_upperbound'].to_numpy('float64'), 
-                        subset_df['r_lowerbound'].to_numpy('float64'),
-                        color='black', alpha=0.33, edgecolor=None,
-                        label = 'Range of Potential \nBow Shock Surfaces')
-        
-        for sc in ['Ulysses', 'Galileo', 'Cassini', 'Juno']:
-            ax.scatter(positions_df.query("spacecraft == @sc")['datetime'], 
-                       positions_df.query("spacecraft == @sc")['r'],
-                       color = spacecraft_color_dict[sc], marker = '.', s = 1, 
-                       label = '{} Trajectory'.format(sc))
-        
-        ax.set(xlim = (subset_df['datetime'].iloc[0], subset_df['datetime'].iloc[-1]))
-        print(subset_df['datetime'].iloc[0], subset_df['datetime'].iloc[-1])
-        # Custom x-axis ticks
-        major_tick_interval = 50 # days
-        first_date = subset_df['datetime'].iloc[0]
-        res = [mdates.date2num(d) for d in subset_df['datetime'] if ((d - first_date).total_seconds() % int(major_tick_interval*24*60*60)) == 0]
-    
-        ax.xaxis.set_major_locator(mticker.MultipleLocator(50))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%j\n%Y'))
-        ax.xaxis.set_minor_locator(mticker.MultipleLocator(10))
-    
-        if start_indx != 0:
-            ax.spines['left'].set_visible(False)
-            ax.tick_params(which = 'both', left = False, labelleft = False)
-            
-            for coords in [(0, 0), (0, 1)]:
-                ax.annotate('/', coords, (0, -0.1), 
-                            'axes fraction', 'offset fontsize', 
-                            ha = 'center', va = 'center')
-            
-            
-            # ax.minorticks_off()
-        if stop_indx != len(balanced_positions_df):
-            ax.spines['right'].set_visible(False)
-            ax.tick_params(which = 'both', right = False, labelright = False)
-            
-            for coords in [(1, 0), (1, 1)]:
-                ax.annotate('/', coords, (0.1,-0.1), 
-                            'axes fraction', 'offset fontsize', 
-                            ha = 'center', va = 'center')
-            # ax.minorticks_off()
-    
-    for ax in axs[0]:
-        ax.set(ylim = [0, 500])
-        
-    axs[0,-1].legend(loc = 'upper right', scatterpoints = 9)
-        
-    
-    # ax.legend()
-    fig.supxlabel('Date [Day of Year / Year]')
-    fig.supylabel(r'$r_{JSS} = \sqrt{x_{JSS}^2 + y_{JSS}^2 + z_{JSS}^2} = \sqrt{x_{JSS}^2 + \rho_{JSS}^2} [R_J]$')
-    # ax.set(xlabel = 'Time', 
-    #        ylabel = r'$r_{JSS} = \sqrt{x_{JSS}^2 + y_{JSS}^2 + z_{JSS}^2} = \sqrt{x_{JSS}^2 + \rho_{JSS}^2} [R_J]$', ylim = (0, 500))
-    
-    plt.show()
-
     return balanced_positions_df
 
 def plot_UpperLowerLimits_Spatial():
@@ -405,6 +315,114 @@ def plot_UpperLowerLimits_Spatial():
     
 def plot_UpperLowerLimits_Temporal():
     
+    spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
+    delta_around_crossing = dt.timedelta(hours=500)
+    other_fraction = 0.2
+    
+    spacecraft_color_dict = {'Ulysses': 'C0',
+                             'Galileo': 'C1',
+                             'Cassini': 'C3',
+                             'Juno': 'C5'}
+    
+    bs_df = PostprocessCrossings(boundary = 'BS', 
+                                 spacecraft_to_use = spacecraft_to_use,
+                                 delta_around_crossing = delta_around_crossing,
+                                 other_fraction = other_fraction)
+    
+    mp_df = PostprocessCrossings(boundary = 'MP', 
+                                 spacecraft_to_use = spacecraft_to_use,
+                                 delta_around_crossing = delta_around_crossing,
+                                 other_fraction = other_fraction)
+    
+    #   Visualize
+    import matplotlib.dates as mdates
+    import matplotlib.ticker as mticker
+    
+    # Set up the figure
+    fig = plt.figure(figsize=(10, 5))
+    subfigs = fig.subfigures(nrows=2, hspace=0.04)
+    
+    for boundary_label, df, subfig in zip(['Bow Shock', 'Magnetopause'], [bs_df, mp_df], subfigs):
+        
+        # Identify gaps in the timeseries
+        # This gives the index of the step BEFORE the bigger gap, you'll want to add one before subscripting the df
+        diffs_in_seconds = np.diff(df['datetime']).astype('float64') * 1e-9
+        all_gaps = np.argwhere(diffs_in_seconds > 600).flatten() + 1
+        long_gaps = np.argwhere(diffs_in_seconds > 10*24*60*60).flatten() + 1
+    
+        width_ratios = np.diff(long_gaps, prepend=0, append=len(df))
+    
+        axs = subfig.subplots(ncols = len(long_gaps)+1, nrows = 1,
+                              width_ratios = width_ratios,
+                              squeeze = False)
+ 
+        plt.subplots_adjust(left=0.1, bottom=0.2, right=0.9, top=0.9,
+                            wspace = 0.04)
+    
+        # Top row: bow shocks
+        for start_indx, stop_indx, ax in zip(np.insert(long_gaps, 0, 0), np.append(long_gaps, len(df)), axs[0]):
+            
+            subset_df = df.iloc[start_indx:stop_indx]
+            
+            for sc in ['Ulysses', 'Galileo', 'Cassini', 'Juno']:
+                ax.fill_between(subset_df.query("spacecraft == @sc")['datetime'], 
+                                subset_df.query("spacecraft == @sc")['r_upperbound'].to_numpy('float64'), 
+                                subset_df.query("spacecraft == @sc")['r_lowerbound'].to_numpy('float64'),
+                                color='black', alpha=0.33, edgecolor=None,
+                                label = 'Range of Potential \n{} Surfaces'.format(boundary_label) if sc == 'Ulysses' else '_')
+            
+                ax.scatter(subset_df.query("spacecraft == @sc")['datetime'], 
+                           subset_df.query("spacecraft == @sc")['r'],
+                           color = spacecraft_color_dict[sc], marker = '.', s = 1, 
+                           label = '{} Trajectory'.format(sc))
+            
+            ax.set(xlim = (subset_df['datetime'].iloc[0], subset_df['datetime'].iloc[-1]))
+           
+            # Custom x-axis ticks
+            major_tick_interval = 150 # days
+            first_date = subset_df['datetime'].iloc[0]
+            res = [mdates.date2num(d) for d in subset_df['datetime'] if ((d - first_date).total_seconds() % int(major_tick_interval*24*60*60)) == 0]
+        
+            ax.xaxis.set_major_locator(mticker.MultipleLocator(150))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%j\n%Y'))
+            ax.xaxis.set_minor_locator(mticker.MultipleLocator(50))
+        
+            if start_indx != 0:
+                ax.spines['left'].set_visible(False)
+                ax.tick_params(which = 'both', left = False, labelleft = False)
+                
+                for coords in [(0, 0), (0, 1)]:
+                    ax.annotate('/', coords, (0, -0.1), 
+                                'axes fraction', 'offset fontsize', 
+                                ha = 'center', va = 'center')
+                
+                # ax.minorticks_off()
+            if stop_indx != len(df):
+                ax.spines['right'].set_visible(False)
+                ax.tick_params(which = 'both', right = False, labelright = False)
+                
+                for coords in [(1, 0), (1, 1)]:
+                    ax.annotate('/', coords, (0.1,-0.1), 
+                                'axes fraction', 'offset fontsize', 
+                                ha = 'center', va = 'center')
+                # ax.minorticks_off()
+        
+        for ax in axs[0]:
+            ax.set(ylim = [0, 500])
+            
+        axs[0,-1].legend(loc = 'upper right', scatterpoints = 9)
+            
+        
+        # ax.legend()
+        fig.supxlabel('Date [Day of Year / Year]')
+        fig.supylabel(r'$r_{JSS} = \sqrt{x_{JSS}^2 + y_{JSS}^2 + z_{JSS}^2} = \sqrt{x_{JSS}^2 + \rho_{JSS}^2} [R_J]$')
+        # ax.set(xlabel = 'Time', 
+        #        ylabel = r'$r_{JSS} = \sqrt{x_{JSS}^2 + y_{JSS}^2 + z_{JSS}^2} = \sqrt{x_{JSS}^2 + \rho_{JSS}^2} [R_J]$', ylim = (0, 500))
+    
+    plt.show()
+
+    
+    
     breakpoint()
 def plot_Crossings():
     
@@ -545,19 +563,23 @@ def balance_Classes(df, boundary, delta, other_fraction=0.1):
         specified boundaries and time windows, plus a random selection of 
         additional measurements to achieve balance.
     """
-    
-    if boundary.lower() in ['bs', 'bow shock']:
-        crossings_bool = np.diff(df['SW'].to_numpy(), prepend=1) != 0
-    elif boundary.lower() in ['mp', 'magnetopause']:
-        crossings_bool = np.diff(df['MS'].to_numpy(), prepend=0) != 0
-    else:
-        print("Invalid boundary selection!")
-        breakpoint()
-    
-    crossing_datetimes = df.loc[crossings_bool]['datetime']
+    # Have to do this by spacecraft, else simultaneous spacecraft mess it up
+    crossings_datetimes = []
+    for sc in set(df['spacecraft']):
+        subset_df = df.query("spacecraft == @sc")
+        
+        if boundary.lower() in ['bs', 'bow shock']:
+            crossings_bool = np.diff(subset_df['SW'].to_numpy(), prepend=1) != 0
+        elif boundary.lower() in ['mp', 'magnetopause']:
+            crossings_bool = np.diff(subset_df['MS'].to_numpy(), prepend=0) != 0
+        else:
+            print("Invalid boundary selection!")
+            breakpoint()
+        
+        crossings_datetimes.extend(subset_df.loc[crossings_bool]['datetime'])
     
     balanced_arr = np.zeros(len(df), dtype='int32')
-    for datetime in crossing_datetimes:
+    for datetime in crossings_datetimes:
         
         # Querying doesn't work here for some reason...
         indx = (df['datetime'] >= datetime - delta) & (df['datetime'] < datetime + delta)
@@ -568,7 +590,7 @@ def balance_Classes(df, boundary, delta, other_fraction=0.1):
     # Add in some remaining measurements
     other_indx = np.argwhere(balanced_bool == False).flatten()
     rng = np.random.default_rng()
-    to_add_indx = rng.choice(other_indx, int(0.1 * len(other_indx)), replace=False)
+    to_add_indx = rng.choice(other_indx, int(other_fraction * len(other_indx)), replace=False)
     balanced_bool[to_add_indx] = True
     
     return df.loc[balanced_bool]
@@ -576,7 +598,7 @@ def balance_Classes(df, boundary, delta, other_fraction=0.1):
 def add_Bounds(df, boundary, upperbound, lowerbound):
     
     # Coefficients affecting pressure should be 0 (no p_dyn dependence)
-    coords = [df['t'].to_numpy(), df['p'].to_numpy(), np.zeros(len(df))]
+    coords = [df['t'].to_numpy(), df['p'].to_numpy(), np.zeros(len(df))+0.1]
     df.loc[:, 'r_upperbound'] = BM.Shuelike(upperbound, coords)
     df.loc[:, 'r_lowerbound'] = BM.Shuelike(lowerbound, coords)
     
