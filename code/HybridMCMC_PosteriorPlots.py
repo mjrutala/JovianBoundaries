@@ -165,12 +165,6 @@ def plot_Interpretation(model_dict, posterior, positions_df):
             
 def plot_AgainstTrajectories(boundary = 'BS', model_dict = None, posterior = None):
     
-    # model_dict = BM.init('Shuelike_AsymmetryCase1')
-    # boundary = 'BS'
-    # posterior = 
-    # posterior_params_mean = [80, -0.05, -9, 0.8, -0.29]
-    # posterior_params_vals = []
-    
     # Parse the posterior object
     if posterior is not None:
         # Draw samples to give a sense of the model spread:
@@ -279,15 +273,27 @@ def plot_AgainstTrajectories(boundary = 'BS', model_dict = None, posterior = Non
                   position = (y_label_centered_x, y_label_centered_y),
                   ha = 'right', va = 'center')
     
-    axs[0].set(xlim = (200, -700),
-               ylim = (0, 500),
-               aspect = 1)
+    if boundary == 'BS':
+        axs[0].set(xlim = (200, -700),
+                   ylim = (0, 500),
+                   aspect = 1)
+        axs[1].set(xlim = (200, -700),
+                    ylim = (0, -500),
+                    aspect = 1)
+    elif boundary == 'MP':
+        axs[0].set(xlim = (140, -400),
+                   ylim = (0, 300),
+                   aspect = 1)
+        axs[1].set(xlim = (140, -400),
+                    ylim = (0, -300),
+                    aspect = 1)
+    else:
+        breakpoint()
+        
     axs[0].annotate('(a)', 
                     (0,1), (0.5,-1), 
                     'axes fraction', 'offset fontsize', ha='left', va='top')
-    axs[1].set(xlim = (200, -700),
-                ylim = (0, -500),
-                aspect = 1)
+    
     axs[1].annotate('(b)', 
                     (0,1), (0.5,-1), 
                     'axes fraction', 'offset fontsize', ha = 'left', va='top')
@@ -461,14 +467,162 @@ def plot_AgainstTrajectories(boundary = 'BS', model_dict = None, posterior = Non
     
             
     plt.show()
-    
-def match_CrossingsAndTrajectories(boundary, model_dict, posterior, constant_posterior=False):
+
+def ConfusionMatrix(boundary, model_dict, posterior, constant_posterior=False):
     
     # Get the spacecraft positions and crossings
     # Even if we don't use all of these in the MCMC, we can compare to all of them
     resolution = '10Min'
     spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
-    boundary = 'BS'
+    positions_df = postproc.PostprocessCrossings(boundary, spacecraft_to_use = spacecraft_to_use, 
+                                                 delta_around_crossing=dt.timedelta(hours=500), 
+                                                 other_fraction=0.0)
+    positions_df = positions_df.query('r_upperbound < 1e3 & r_lowerbound < 1e3')
+    
+    # Get rid of times when the region is unknown, as these can't be used for testing
+    positions_df_original = positions_df.query("region != 'UN'")
+    
+    # # Optionally, filter for crossings or near-crossings
+    long_positions_df = postproc.balance_Classes(positions_df_original, boundary, dt.timedelta(hours=500), other_fraction=0.0)
+    short_positions_df = postproc.balance_Classes(positions_df_original, boundary, dt.timedelta(hours=5), other_fraction=0.0)
+
+    if constant_posterior == False:
+        # Draw samples to give a sense of the model spread:
+        posterior_params_samples = az.extract(posterior, num_samples=100)
+        
+        posterior_params_mean = []
+        posterior_params_vals = []
+        
+        posterior_sigmas_mean = []
+        posterior_sigmas_vals = []
+        for param_name in model_dict['param_distributions'].keys():
+            
+            # Get mean values for each parameter
+            posterior_params_mean.append(np.mean(posterior[param_name].values))
+            
+            # And record the sample values
+            posterior_params_vals.append(posterior_params_samples[param_name].values)
+            
+            # Get sigmas
+            if 'sigma_r0' in list(posterior.variables):
+                flag_multi_sigma = 1
+                sigma_param_name = 'sigma_' + param_name
+                if sigma_param_name in list(posterior.variables):
+                    posterior_sigmas_mean.append(np.median(posterior[sigma_param_name].values))
+                    
+                    posterior_sigmas_vals.append(posterior_params_samples[sigma_param_name].values)
+                else:
+                    posterior_sigmas_mean.append(np.median(posterior[param_name].values))
+                    posterior_sigmas_vals.append(posterior_params_samples[param_name].values)
+            else:
+                flag_multi_sigma = 0
+                posterior_sigmas_mean.append(np.median(posterior_params_samples['sigma_fn'].values))
+                posterior_sigmas_vals.append(posterior_params_samples['sigma_fn'].values)
+        
+        # Transpose so we get a list of params in proper order
+        posterior_params_vals = np.array(posterior_params_vals).T
+        posterior_sigmas_vals = np.array(posterior_sigmas_vals).T
+    
+    else:
+        # A 'constant posterior' is a 1D vector of model parameters
+        flag_multi_sigma = 1
+        posterior_params_vals = np.array([posterior])
+        posterior_sigmas_vals = np.array([[0 for e in posterior]])
+    
+    # Get rng for adding sigmas
+    rng = np.random.default_rng()
+    
+    for df_label, positions_df in zip(['500h', '5h'], [long_positions_df, short_positions_df]):
+    
+        # Get the true locations
+        if boundary == 'BS':
+            outside_boundary_data = (positions_df['region'] == 'SW').to_numpy()
+        elif boundary == 'MP':
+            outside_boundary_data = (positions_df['region'] != 'MS').to_numpy()
+        else:
+            print("WRONG BOUNDARY NAME")
+            breakpoint()
+            
+        outside_boundary_model = []
+        true_positives = [] # Both are outside the boundary (i.e., both True)
+        true_negatives = [] # Both are inside the boundary (i.e., both False)
+        false_positives = [] # Actually inside, model says outside
+        false_negatives = [] # Actually outside, model says inside
+        
+        # For each point in positions_df, get the expected boundary location
+        # Do this n=10 times to account for uncertainty
+        for params, sigma_params in zip(posterior_params_vals, posterior_sigmas_vals):
+            
+            # Boundary distance according to model:
+            r_b = model_dict['model'](params, positions_df[['t', 'p', 'p_dyn']].to_numpy('float64').T)
+            
+            # Uncertainty on r_b
+            if flag_multi_sigma == 1:
+                r_b_sigma = model_dict['model'](sigma_params, positions_df[['t', 'p', 'p_dyn']].to_numpy('float64').T)
+                if (r_b_sigma == 0).any():
+                    r_b_sigma[np.argwhere(r_b_sigma == 0)] = r_b[np.argwhere(r_b_sigma == 0)] * 1e-6
+            else:
+                r_b_sigma = np.zeros(len(r_b)) + sigma_params[0]
+            
+            for i in range(10):
+                outside_boundary_bool = positions_df['r'].to_numpy() > rng.normal(loc = r_b, scale = r_b_sigma) 
+                outside_boundary_model.append(outside_boundary_bool)
+                
+                tn, fp, fn, tp = metrics.confusion_matrix(outside_boundary_data, outside_boundary_bool).ravel()
+                true_positives.append(tp)
+                true_negatives.append(tn)
+                false_positives.append(fp)
+                false_negatives.append(fn)
+            
+        # Print some statistics
+        true_positives = np.array(true_positives)
+        true_negatives = np.array(true_negatives)
+        false_positives = np.array(false_positives)
+        false_negatives = np.array(false_negatives)
+        totals = np.array(true_positives + true_negatives + false_positives + false_negatives)
+        
+        true_positives_rate = true_positives / (true_positives + false_negatives)  # recall
+        false_negatives_rate = false_negatives / (true_positives + false_negatives)
+        true_negatives_rate = true_negatives / (true_negatives + false_positives)
+        false_positives_rate = false_positives / (true_negatives + false_positives)
+        
+        positive_predictive_values = true_positives / (true_positives + false_positives) # precision
+        negative_predictive_values = true_negatives / (true_negatives + false_negatives)
+        
+        F1 = (2 * positive_predictive_values * true_positives_rate) / (positive_predictive_values + true_positives_rate)
+    
+        # print("Parameter Values:")
+        # for param_vals in posterior_params_vals.T:
+        #     print("{:.3f} +/- {:.3f}".format(np.mean(param_vals), np.std(param_vals)))
+        # for sigma_vals in posterior_sigmas_vals.T:
+        #     print("{:.3f} +/- {:.3f}".format(np.mean(sigma_vals), np.std(sigma_vals)))
+        
+        print("Confusion Matrix Statistics for {} window".format(df_label))
+        print("True Positives: {:.1f} +/- {:.1f}".format(100*np.mean(true_positives/totals), 100*np.std(true_positives/totals)))
+        print("False Negatives: {:.1f} +/- {:.1f}".format(100*np.mean(false_negatives/totals), 100*np.std(true_positives/totals)))
+        print("True Negatives: {:.1f} +/- {:.1f}".format(100*np.mean(true_negatives/totals), 100*np.std(true_positives/totals)))
+        print("False Positives: {:.1f} +/- {:.1f}".format(100*np.mean(false_positives/totals), 100*np.std(true_positives/totals)))
+        
+        print("Accuracy: {:.1f} +/- {:.1f}".format(np.mean((true_positives + true_negatives)/totals)*100, np.std((true_positives + true_negatives)/totals)*100))
+        
+        print("True Positive Rate (Recall): {:.1f} +/- {:.1f}".format(np.mean(true_positives_rate)*100, np.std(true_positives_rate)*100))
+        # print("False Negative Rate: {:.3f} +/- {:.3f}".format(np.mean(false_negatives_rate)*100, np.std(false_negatives_rate)*100))
+        print("True Negative Rate: {:.1f} +/- {:.1f}".format(np.mean(true_negatives_rate)*100, np.std(true_negatives_rate)*100))
+        # print("False Positive Rate: {:.3f} +/- {:.3f}".format(np.mean(false_positives_rate)*100, np.std(false_positives_rate)*100))
+        
+        print("Positive Predictive Value: {:.1f} +/- {:.1f}".format(np.mean(positive_predictive_values)*100, np.std(positive_predictive_values)*100))
+        print("Negative Predictive Value: {:.1f} +/- {:.1f}".format(np.mean(negative_predictive_values)*100, np.std(negative_predictive_values)*100))
+        
+        print("Informedness: {:.1f} +/- {:.1f}".format(np.mean(true_positives_rate + true_negatives_rate - 1)*100, np.std(true_positives_rate + true_negatives_rate - 1)*100))
+    
+    return
+
+def ConfusionMatrix_vs_WindowSize(boundary, model_dict, posterior, constant_posterior=False):
+    
+    # Get the spacecraft positions and crossings
+    # Even if we don't use all of these in the MCMC, we can compare to all of them
+    resolution = '10Min'
+    spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
     positions_df = postproc.PostprocessCrossings(boundary, spacecraft_to_use = spacecraft_to_use, 
                                                  delta_around_crossing=dt.timedelta(hours=500), 
                                                  other_fraction=0.0)
@@ -479,11 +633,11 @@ def match_CrossingsAndTrajectories(boundary, model_dict, posterior, constant_pos
     positions_df_original = positions_df.query("region != 'UN'")
     breakpoint()
     
-    test_windows = np.arange(0, 500, 50)
+    test_windows = [0.2, 0.4, 0.5, 0.8, 1, 2, 4, 6, 8, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500]
     len_arr = []
     informedness_arr = []
     for test_window in test_windows:
-        positions_df = postproc.balance_Classes(positions_df_original, 'BS', dt.timedelta(hours=int(test_window)))
+        positions_df = postproc.balance_Classes(positions_df_original, boundary, dt.timedelta(hours=test_window), other_fraction=0.0)
         len_arr.append(len(positions_df))
     
         if constant_posterior == False:
@@ -529,7 +683,6 @@ def match_CrossingsAndTrajectories(boundary, model_dict, posterior, constant_pos
             posterior_params_vals = np.array([posterior])
             posterior_sigmas_vals = np.array([[0 for e in posterior]])
             
-    
         # Get rng for adding sigmas
         rng = np.random.default_rng()
         
@@ -590,32 +743,16 @@ def match_CrossingsAndTrajectories(boundary, model_dict, posterior, constant_pos
         
         F1 = (2 * positive_predictive_values * true_positives_rate) / (positive_predictive_values + true_positives_rate)
         
-        print("Parameter Values:")
-        for param_vals in posterior_params_vals.T:
-            print("{:.3f} +/- {:.3f}".format(np.mean(param_vals), np.std(param_vals)))
-        for sigma_vals in posterior_sigmas_vals.T:
-            print("{:.3f} +/- {:.3f}".format(np.mean(sigma_vals), np.std(sigma_vals)))
-        
-        print("Confusion Matrix Statistics:")
-        print("True Positives: {:.1f} +/- {:.1f}".format(100*np.mean(true_positives/totals), 100*np.std(true_positives/totals)))
-        print("False Negatives: {:.1f} +/- {:.1f}".format(100*np.mean(false_negatives/totals), 100*np.std(true_positives/totals)))
-        print("True Negatives: {:.1f} +/- {:.1f}".format(100*np.mean(true_negatives/totals), 100*np.std(true_positives/totals)))
-        print("False Positives: {:.1f} +/- {:.1f}".format(100*np.mean(false_positives/totals), 100*np.std(true_positives/totals)))
-        
-        print("Accuracy: {:.1f} +/- {:.1f}".format(np.mean((true_positives + true_negatives)/totals)*100, np.std((true_positives + true_negatives)/totals)*100))
-        
-        print("True Positive Rate (Recall): {:.1f} +/- {:.1f}".format(np.mean(true_positives_rate)*100, np.std(true_positives_rate)*100))
-        # print("False Negative Rate: {:.3f} +/- {:.3f}".format(np.mean(false_negatives_rate)*100, np.std(false_negatives_rate)*100))
-        print("True Negative Rate: {:.1f} +/- {:.1f}".format(np.mean(true_negatives_rate)*100, np.std(true_negatives_rate)*100))
-        # print("False Positive Rate: {:.3f} +/- {:.3f}".format(np.mean(false_positives_rate)*100, np.std(false_positives_rate)*100))
-        
-    
-        print("Positive Predictive Value: {:.1f} +/- {:.1f}".format(np.mean(positive_predictive_values)*100, np.std(positive_predictive_values)*100))
-        print("Negative Predictive Value: {:.1f} +/- {:.1f}".format(np.mean(negative_predictive_values)*100, np.std(negative_predictive_values)*100))
-        # print("F1 Score: {:.3f} +/- {:.3f}".format(np.mean(F1)*100, np.std(F1)*100))
-        print("Informedness: {:.1f} +/- {:.1f}".format(np.mean(true_positives_rate + true_negatives_rate - 1)*100, np.std(true_positives_rate + true_negatives_rate - 1)*100))
-        
         informedness_arr.append(np.mean(true_positives_rate + true_negatives_rate - 1)*100)
+        
+        fig, ax = plt.subplots()
+        ax.plot(test_windows, len_arr)
+        ax1 = ax.twinx()
+        ax1.plot(test_windows, informedness_arr, color='C1')
+        ax.set(xlabel='Halfwidth of window around crossing [hours]', ylabel = '# of datapoints')
+        ax1.set(ylabel='Informedness [%]')
+        ax1.spines['left'].set_color('C0')
+        ax1.spines['right'].set_color('C1')
         
     breakpoint()
     return
