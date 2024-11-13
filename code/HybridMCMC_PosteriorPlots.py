@@ -503,21 +503,28 @@ def ConfusionMatrix(boundary, model_dict, posterior, constant_posterior=False):
             # And record the sample values
             posterior_params_vals.append(posterior_params_samples[param_name].values)
             
-            # Get sigmas
-            if 'sigma_r0' in list(posterior.variables):
-                flag_multi_sigma = 1
-                sigma_param_name = 'sigma_' + param_name
-                if sigma_param_name in list(posterior.variables):
-                    posterior_sigmas_mean.append(np.median(posterior[sigma_param_name].values))
+            # # Get sigmas
+            # if 'sigma_r0' in list(posterior.variables):
+            #     flag_multi_sigma = 1
+            #     sigma_param_name = 'sigma_' + param_name
+            #     if sigma_param_name in list(posterior.variables):
+            #         posterior_sigmas_mean.append(np.median(posterior[sigma_param_name].values))
                     
-                    posterior_sigmas_vals.append(posterior_params_samples[sigma_param_name].values)
-                else:
-                    posterior_sigmas_mean.append(np.median(posterior[param_name].values))
-                    posterior_sigmas_vals.append(posterior_params_samples[param_name].values)
-            else:
-                flag_multi_sigma = 0
-                posterior_sigmas_mean.append(np.median(posterior_params_samples['sigma_fn'].values))
-                posterior_sigmas_vals.append(posterior_params_samples['sigma_fn'].values)
+            #         posterior_sigmas_vals.append(posterior_params_samples[sigma_param_name].values)
+            #     else:
+            #         posterior_sigmas_mean.append(np.median(posterior[param_name].values))
+            #         posterior_sigmas_vals.append(posterior_params_samples[param_name].values)
+            # else:
+            #     flag_multi_sigma = 0
+            #     posterior_sigmas_mean.append(np.median(posterior_params_samples['sigma_fn'].values))
+            #     posterior_sigmas_vals.append(posterior_params_samples['sigma_fn'].values)
+        
+        # Get sigma_m and sigma_b
+        posterior_sigmas_mean.append(np.mean(posterior['sigma_m'].values))
+        posterior_sigmas_mean.append(np.mean(posterior['sigma_b'].values))
+        
+        posterior_sigmas_vals.append(posterior_params_samples['sigma_m'].values)
+        posterior_sigmas_vals.append(posterior_params_samples['sigma_b'].values)
         
         # Transpose so we get a list of params in proper order
         posterior_params_vals = np.array(posterior_params_vals).T
@@ -556,13 +563,16 @@ def ConfusionMatrix(boundary, model_dict, posterior, constant_posterior=False):
             # Boundary distance according to model:
             r_b = model_dict['model'](params, positions_df[['t', 'p', 'p_dyn']].to_numpy('float64').T)
             
+            # # Uncertainty on r_b
+            # if flag_multi_sigma == 1:
+            #     r_b_sigma = model_dict['model'](sigma_params, positions_df[['t', 'p', 'p_dyn']].to_numpy('float64').T)
+            #     if (r_b_sigma == 0).any():
+            #         r_b_sigma[np.argwhere(r_b_sigma == 0)] = r_b[np.argwhere(r_b_sigma == 0)] * 1e-6
+            # else:
+            #     r_b_sigma = np.zeros(len(r_b)) + sigma_params[0]
+            
             # Uncertainty on r_b
-            if flag_multi_sigma == 1:
-                r_b_sigma = model_dict['model'](sigma_params, positions_df[['t', 'p', 'p_dyn']].to_numpy('float64').T)
-                if (r_b_sigma == 0).any():
-                    r_b_sigma[np.argwhere(r_b_sigma == 0)] = r_b[np.argwhere(r_b_sigma == 0)] * 1e-6
-            else:
-                r_b_sigma = np.zeros(len(r_b)) + sigma_params[0]
+            r_b_sigma = sigma_params[0] * r_b + sigma_params[1]
             
             for i in range(10):
                 outside_boundary_bool = positions_df['r'].to_numpy() > rng.normal(loc = r_b, scale = r_b_sigma) 
