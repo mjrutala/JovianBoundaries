@@ -279,6 +279,35 @@ def Shuelike(parameters=[], coordinates=[], variables=False,
     
     return r
 
+    # # Attempt to handle multiple parameters simultaneously-- pymc didn't like it :(
+    # # Optionally, return variables
+    # if variables:
+    #     return ('t', 'p', 'p_dyn'), 'r'
+    
+    # # Unpack coordinates
+    # t, p, p_dyn = coordinates
+    
+    # # Unpack parameters, checking that they are iterable
+    # if len(np.shape(parameters)) == 1:
+    #     parameters = [[p] for p in parameters]
+    # r0arr, r1arr, a0arr, a1arr = parameters
+    
+    # r_arr, r_b_arr, a_f_arr = [], [], []
+    # for r0, r1, a0, a1 in zip(r0arr, r1arr, a0arr, a1arr):
+    #     # Calculate r_b & a_f, returning one if requested
+    #     r_b_arr.append(r0*((p_dyn)**(r1)))
+    #     a_f_arr.append(a0 + a1 * p_dyn)
+        
+    #     # Calculate r
+    #     r_arr.append(r_b_arr[-1] * (2/(1 + np.cos(t)))**a_f_arr[-1])
+        
+    
+    # if return_r_b:
+    #     return np.squeeze(np.array(r_b_arr))
+    # if return_a_f:
+    #     return np.squeeze(np.array(a_f_arr))
+    # return np.squeeze(np.array(r_arr))
+
 def Shuelike_r1fixed(parameters=[], coordinates=[], variables=False,
              return_r_b:bool=False, return_a_f:bool=False):
     """
