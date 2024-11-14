@@ -188,14 +188,12 @@ def init(model_name):
                                           'model_number': 3,
                                           'param_dict': {},
                                           'param_distributions': {'r0': pm.InverseGamma,
-                                                                  'r1': pm.Normal,
                                                                   'r2': pm.Normal,
                                                                   'r3': pm.Normal,
                                                                   'r4': pm.Normal,
                                                                   'a0': pm.InverseGamma,
                                                                   'a1': pm.Normal},
                                           'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
-                                                                 'r1': {'mu': -0.2, 'sigma': 0.05},
                                                                  'r2': {'mu': -10, 'sigma': 10},
                                                                  'r3': {'mu': 0, 'sigma': 10},
                                                                  'r4': {'mu': 0, 'sigma': 10},
@@ -240,7 +238,7 @@ def init(model_name):
 # =============================================================================
 
 def Shuelike(parameters=[], coordinates=[], variables=False,
-             return_r_b:bool=False, return_a_f:bool=False):
+             return_r_ss:bool=False, return_a_f:bool=False):
     """
     r = r_0 (2/(1 + cos(theta)))^alpha
 
@@ -266,16 +264,16 @@ def Shuelike(parameters=[], coordinates=[], variables=False,
     r0, r1, a0, a1 = parameters
     
     # Calculate r_b & a_f, returning one if requested
-    r_b = r0*((p_dyn)**(r1))
+    r_ss = r0*((p_dyn)**(r1))
     a_f = a0 + a1 * p_dyn
     
-    if return_r_b:
-        return r_b
+    if return_r_ss:
+        return r_ss
     if return_a_f:
         return a_f
     
     # Calculate r
-    r = r_b * (2/(1 + np.cos(t)))**a_f
+    r = r_ss * (2/(1 + np.cos(t)))**a_f
     
     return r
 
@@ -349,7 +347,8 @@ def Shuelike_r1fixed(parameters=[], coordinates=[], variables=False,
     
     return r
 
-def Shuelike_rasymmetric(parameters=[], coordinates=[], variables=False):
+def Shuelike_rasymmetric(parameters=[], coordinates=[], variables=False,
+                         return_r_ss:bool=False, return_a_f:bool=False):
     """
     
 
@@ -375,15 +374,22 @@ def Shuelike_rasymmetric(parameters=[], coordinates=[], variables=False):
     sg_pos = (np.sign(np.sin(p)) + 1)/2
     sg_neg = (np.sign(np.sin(p)) - 1)/2
     
-    r_n = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
+    r_ss = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
     
     a_f =  (a0 + a1 * p_dyn)
     
-    r = r_n * (2/(1 + np.cos(t)))**a_f
-
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f
+        
     return r
 
-def Shuelike_rasymmetric_r1fixed(parameters=[], coordinates=[], variables=False):
+def Shuelike_rasymmetric_r1fixed(parameters=[], coordinates=[], variables=False,
+                                 return_r_ss:bool=False, return_a_f:bool=False):
     """
     
 
@@ -410,11 +416,17 @@ def Shuelike_rasymmetric_r1fixed(parameters=[], coordinates=[], variables=False)
     sg_pos = (np.sign(np.sin(p)) + 1)/2
     sg_neg = (np.sign(np.sin(p)) - 1)/2
     
-    r_n = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
+    r_ss = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
     
     a_f =  (a0 + a1 * p_dyn)
     
-    r = r_n * (2/(1 + np.cos(t)))**a_f
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f
 
     return r
 
