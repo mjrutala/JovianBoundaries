@@ -195,6 +195,7 @@ def _HybridMCMC(boundary, model_name,
                 
                 # Weights for multi-modal fits
                 w = pm.Dirichlet("w", np.ones(2))
+                tracked_var_names.append("w")
                 
                 dists = [pm.Normal.dist(mu = mu0, sigma = sigma_fn),
                          pm.Normal.dist(mu = mu1, sigma = sigma_fn)]
@@ -208,11 +209,17 @@ def _HybridMCMC(boundary, model_name,
                               var_names = tracked_var_names,
                               target_accept=0.90)
                               # init = 'adapt_diag+jitter') # prevents 'jitter', which might move points init vals around too much here
-        
+            
         posterior = idata.posterior
         posterior_list.append(posterior)
     
     posterior = xarray.concat(posterior_list, dim = 'chain')
+    
+    # Separate out the Dirichlet weights if multi-modal
+    if n_modes > 1:
+        for mode_number in posterior['w_dim_0'].values:
+            posterior['w{}'.format(mode_number)] = (("chain", "draw"), posterior['w'].values[:,:,mode_number])
+        posterior = posterior.drop_vars('w')
         
     return posterior, model_dict
 
