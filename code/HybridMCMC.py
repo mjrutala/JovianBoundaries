@@ -10,6 +10,7 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pymc as pm
+import pymc.sampling.jax as pmjax
 import pytensor
 import pytensor.tensor as pt
 
@@ -41,14 +42,14 @@ except:
 
 def HybridMCMC(boundary, model_name, 
                fraction,
-               n_pressures, n_draws, n_chains, n_modes):
+               n_subsets, n_draws, n_chains, n_modes):
     "Shell to run HybridMCMC and save results"
     
     # Get the run start time for file-saving and make a corresponding dir
     now_str = dt.datetime.now().strftime("%Y%m%d%H%M%S")
     savedir = '/Users/mrutala/projects/JupiterBoundaries/posteriors/{}/'.format(now_str)
     if not os.path.exists(savedir):
-        os.makedirs(savedir)
+        mkdir_cmd = os.makedirs # Save command for later: no empty dirs
     else:
         msg = "The path '{}' already exists-- and shouldn't! Returning..."
         print(msg.format(savedir))
@@ -60,7 +61,7 @@ def HybridMCMC(boundary, model_name,
             'spacecraft_to_use': ['Ulysses', 'Galileo', 'Cassini', 'Juno'],     # Data param
             'resolution': '10Min',                                              # Data param
             'fraction': fraction,                                               # Data param
-            'n_pressures': n_pressures,                                         # MCMC param
+            'n_subsets': n_subsets,                                         # MCMC param
             'n_draws': n_draws,                                                 # MCMC param
             'n_chains': n_chains,                                               # MCMC param 
             'n_modes': n_modes}                                                 # MCMC param 
@@ -68,7 +69,8 @@ def HybridMCMC(boundary, model_name,
     # Run the MCMC sampler
     posterior, model_dict = _HybridMCMC(**args)
     
-    # Write to file
+    # Make the directory and write to file
+    mkdir_cmd(savedir)
     stem = "{model_name}-{boundary}_".format(**args) + now_str
     
     # Inputs
@@ -101,84 +103,176 @@ def HybridMCMC(boundary, model_name,
 
 def _HybridMCMC(boundary, model_name,
                 spacecraft_to_use, resolution, fraction, 
-                n_pressures, n_draws, n_chains, n_modes):
+                n_subsets, n_draws, n_chains, n_modes):
     
-    positions_df = postproc.PostprocessCrossings(boundary, spacecraft_to_use = spacecraft_to_use)
+    positions_df = postproc.PostprocessCrossings(boundary, spacecraft_to_use = spacecraft_to_use,
+                                                 delta_around_crossing = dt.timedelta(hours=5),
+                                                 other_fraction = 0.04) # Roughly balanced
     
-    positions_df = positions_df.query('r_upperbound < 1e3 & r_lowerbound < 1e3')
+    # Limit this further? by x, y, z?
+    # positions_df = positions_df.query('r_upperbound < 1e3 & r_lowerbound < 1e3')
+    positions_df = positions_df.query('(-250 < x < 250) & (rho > 30 | x > 0) & ((r_upperbound - r_lowerbound) < 1e3)')
     
     # FOR TESTING, TO MAKE THE MCMC SAMPLER RUN FASTER
-    positions_df = positions_df.sample(frac=fraction, axis='rows', replace=False)
-    n = len(positions_df)
+    # positions_df = positions_df.sample(frac=fraction, axis='rows', replace=False)
+    # positions_df = positions_df.sort_index()
+    
+    # n = len(positions_df)
+    # sub_index = np.array_split(range(n), 5)[0] # !!!!
+    # positions_df = positions_df.iloc[sub_index]
+    # print("Indexing between {} and {}".format(sub_index[0], sub_index[-1]))
+    
+    # breakpoint()
     
     from scipy.stats import skewnorm
     
     # For readability, pull out indiviudal variables to be passed to PyMC
-    r = positions_df['r'].to_numpy('float64')
-    t = positions_df['t'].to_numpy('float64')
-    p = positions_df['p'].to_numpy('float64')
+    # r = positions_df['r'].to_numpy('float64')
+    # log_r = np.log(r)
+    # t = positions_df['t'].to_numpy('float64')
+    # p = positions_df['p'].to_numpy('float64')
     
-    r_lower = positions_df['r_lowerbound'].to_numpy('float64')
-    r_upper = positions_df['r_upperbound'].to_numpy('float64')
+    # r_lower = positions_df['r_lowerbound'].to_numpy('float64')
+    # r_upper = positions_df['r_upperbound'].to_numpy('float64')
     
-    p_dyn_loc   = positions_df['p_dyn_loc'].to_numpy('float64')
-    p_dyn_scale = positions_df['p_dyn_scale'].to_numpy('float64')
-    p_dyn_alpha = positions_df['p_dyn_a'].to_numpy('float64')
-    p_dyn_mu    = skewnorm.mean(loc = p_dyn_loc, scale = p_dyn_scale, a = p_dyn_alpha)
-    p_dyn_sigma = skewnorm.std(loc = p_dyn_loc, scale = p_dyn_scale, a = p_dyn_alpha)
-
-    test_pressure_dist = pm.SkewNormal.dist(mu = p_dyn_mu, sigma = p_dyn_sigma, alpha = p_dyn_alpha)
-    test_pressure_draws = pm.draw(test_pressure_dist, draws=n_pressures)
-    # Hacky, but assume negative pressures correspond to small pressures
-    test_pressure_draws[test_pressure_draws < 0] = np.min(test_pressure_draws[test_pressure_draws > 0])
-    if len(np.shape(test_pressure_draws)) < 2:
-        test_pressure_draws = [test_pressure_draws]
+    J02_original_params = JBC.get_JoyParameters()
     
     # Model and MCMC params
     posterior_list = []    
     model_dict = BM.init(model_name)
     
-    print("Testing {} pressure draws".format(len(test_pressure_draws)))
-    for pressure_draw in test_pressure_draws:
+    # Resample the data and pressures n_subset times
+    data_draws = [positions_df.sample(frac=fraction, axis='rows', replace=True) for i in range(n_subsets)]
+    pressure_draws = []
+    for i in range(n_subsets):
+        
+        data_draw = data_draws[i]
+        data_draw = data_draw.sort_index()
+        
+        # Sample the pressure distribution
+        p_dyn_loc   = data_draw['p_dyn_loc'].to_numpy('float64')
+        p_dyn_scale = data_draw['p_dyn_scale'].to_numpy('float64')
+        p_dyn_alpha = data_draw['p_dyn_a'].to_numpy('float64')
+        p_dyn_mu    = skewnorm.mean(loc = p_dyn_loc, scale = p_dyn_scale, a = p_dyn_alpha)
+        p_dyn_sigma = skewnorm.std(loc = p_dyn_loc, scale = p_dyn_scale, a = p_dyn_alpha)
+        
+        pressure_dist = pm.SkewNormal.dist(mu = p_dyn_mu, sigma = p_dyn_sigma, alpha = p_dyn_alpha)
+        pressure_draw = pm.draw(pressure_dist, draws=1)
+        # Hacky, but assume negative pressures correspond to small pressures
+        pressure_draw[pressure_draw < 0] = np.min(pressure_draw[pressure_draw > 0])
+        data_draw['pressure_draw'] = pressure_draw
+        
+        data_draws[i] = data_draw
+        
+      
+    # Print a size warning
+    print("Testing {} randomly sampled subsets with replacement".format(n_subsets))
+
+    for data_draw in data_draws:
+        
+        n = len(data_draw)
+        print("n={} samples testing-- This should not exceed ~4000.".format(n))
         
         with pm.Model() as test_potential:
-    
-            p_dyn_obs = pressure_draw
+            tracked_var_names = []
+               
+            param_dict = {}
+            # mu_dict = {}
+            # sigma_dict = {}
             
             #   N.B.: 'param_dict' must keep the same name, as it is used in code string evaluation below
-            param_dict = {}
             for param_name in model_dict['param_distributions'].keys():
                 param_dist = model_dict['param_distributions'][param_name]
                 
                 param = param_dist(param_name, **model_dict['param_descriptions'][param_name])
                 
                 param_dict[param_name] = param
-            
+                
             # Assign variable names to a list of tracking in the sampler
-            param_names = list(param_dict.keys())
-            tracked_var_names = []
-            for pname in param_names:
-                tracked_var_names.append(pname)
-            
             params = list(param_dict.values())
+            tracked_var_names.extend(list(param_dict.keys()))
             
-            # The predicted mean location of the boundary is a function of pressure
-            mu0 = pm.Deterministic("mu0", model_dict['model'](params, [t, p, p_dyn_obs]))
-            
-            # This section adds a penalty for creating a closed boundary (i.e., no open field lines)
+            # This section adds a penalty for creating a closed boundary
             if 'Shue' in model_name:
-                flare_pred =  pm.Deterministic("flare_pred", model_dict['model'](params, [t, p, p_dyn_obs], return_a_f=True))
+                flare_pred =  pm.Deterministic("flare_pred", model_dict['model'](list(param_dict.values()), data_draw[['t', 'p', 'pressure_draw']].to_numpy('float64').T, return_a_f=True))
                 closed_penalty = pm.Potential("closed_penalty", pm.math.switch(flare_pred < 0.5, -np.inf, 0))
+                
+            # tracked_var_names = list(param_dict.keys())
+            # for pname in param_names:
+            #     tracked_var_names.append(pname)
             
-            # The observed mean location will vary based on internal drivers
-            # In a spherical coordinate system, the variation in r must increase with theta
-            r_obs = pm.Uniform("r_obs", lower = r_lower, upper = r_upper)
+            # Make sigma which increases with r
+            # sigma_b = pm.HalfNormal("sigma_b", 10.0)
+            # sigma_m = pm.HalfNormal("sigma_m", 0.1)
+            # tracked_var_names = ["sigma_b", "sigma_m"]
+            # sigma = pm.Deterministic("sigma", sigma_b + sigma_m * mu0)
             
-            # Make sigma increase with t
-            sigma_b = pm.HalfNormal("sigma_b", 1.0)
-            sigma_m = pm.HalfNormal("sigma_m", 1.0)
-            sigma_fn = pm.Deterministic("sigma_fn", sigma_b + sigma_m * mu0)
-            tracked_var_names.extend(["sigma_b", "sigma_m"])
+            r_J02_original = BM.Joylike_r1fixed(J02_original_params, data_draw[['t', 'p', 'pressure_draw']].to_numpy('float64').T)
+            
+            if 'log' not in model_name:
+                mu0 = pm.Deterministic("mu0", model_dict['model'](list(param_dict.values()), data_draw[['t', 'p', 'pressure_draw']].to_numpy('float64').T))
+                
+                sigma_b = pm.HalfNormal("sigma_b", 4)
+                sigma_m = pm.HalfNormal("sigma_m", 0.05)
+                sigma = sigma_b + sigma_m * mu0
+                tracked_var_names.extend(["sigma_b", "sigma_m"])
+                
+                # r_obs = pm.Uniform("r_obs", 
+                #                    lower = data_draw['r_lowerbound'].to_numpy('float64'), 
+                #                    upper = data_draw['r_upperbound'].to_numpy('float64'))
+                r_obs = pm.TruncatedNormal("r_obs", 
+                                           mu = r_J02_original, sigma=10,
+                                           lower = data_draw['r_lowerbound'].to_numpy('float64'), 
+                                           upper = data_draw['r_upperbound'].to_numpy('float64'))
+                
+                m, s, r = mu0, sigma, r_obs
+                
+            else:
+                breakpoint()
+                # log_mu0 = pm.Deterministic("log_mu0", model_dict['model'](list(param_dict.values()), [t, p, log_p_dyn]))
+                
+                # sigma_m = pm.HalfNormal("sigma_m", 10)
+                # log_sigma = sigma_m/np.exp(log_mu0)
+                # tracked_var_names.append("sigma_m")
+                
+                # log_r_obs = pm.Uniform("log_r_obs", lower = np.log(r_lower), upper = np.log(r_upper))
+                
+                # m, s, r = log_mu0, log_sigma, log_r_obs
+            
+            # # No constant; may or may not be log, depending on the input model
+            # sigma = pm.HalfNormal("sigma_b", 10/mu0)
+            # tracked_var_names.append("log_sigma")
+            
+            # # The predicted mean location of the boundary is a function of pressure
+            # mu0 = pm.Deterministic("mu0", model_dict['model'](params, [t, p, p_dyn_obs]))
+            
+            # # This section adds a penalty for creating a closed boundary
+            # if 'Shue' in model_name:
+            #     flare_pred =  pm.Deterministic("flare_pred", model_dict['model'](params, [t, p, p_dyn_obs], return_a_f=True))
+            #     closed_penalty = pm.Potential("closed_penalty", pm.math.switch(flare_pred < 0.5, -np.inf, 0))
+            
+            # The observed/inferred range of boundary locations
+            
+            # r_mu_estimate = BM.Joylike_r1fixed(J02_original_params, [t, p, log_p_dyn])
+            # r_obs = pm.TruncatedNormal("r_obs", mu = r_mu_estimate, sigma = 10, 
+            #                            lower = r_lower, upper = r_upper)
+            
+            # r_obs = pm.Uniform("r_obs", lower = r_lower, upper = r_upper)
+            # log_r_obs = pm.Uniform("log_r_obs", lower = np.log(r_lower), upper = np.log(r_upper))
+            
+            # mean_r_bound = (r_lower + r_upper)/2.
+            # log_r_obs = pm.TruncatedNormal("log_r_obs", 
+            #                                 mu = np.log(mean_r_bound), 
+            #                                 sigma = (r_upper - r_lower)/mean_r_bound,
+            #                                 lower = np.log(r_lower),
+            #                                 upper = np.log(r_upper))
+            
+            
+            # # Make sigma increase with r
+            # sigma_b = pm.HalfNormal("sigma_b", 1.0)
+            # sigma_m = pm.HalfNormal("sigma_m", 1.0)
+            # sigma_fn = pm.Deterministic("sigma_fn", sigma_b + sigma_m * mu0)
+            # tracked_var_names.extend(["sigma_b", "sigma_m"])
 
             # likelihood = pm.Potential("likelihood", pm.logp(pm.Normal.dist(mu = mu_pred, sigma = sigma_fn), value=r_obs))
             # sigma_dist = pm.Normal("sigma_dist", 0, 1)
@@ -186,30 +280,95 @@ def _HybridMCMC(boundary, model_name,
             
             # Optionally, handle multiple modes           
             if n_modes == 1:
-                likelihood = pm.Normal("likelihood", mu = mu0 - r_obs, sigma = sigma_fn, observed = np.zeros(n))
+                dist = pm.Normal.dist(mu = m, sigma = s)
+                likelihood = pm.Normal("likelihood", pm.logp(dist, value = r))
                 
             elif n_modes == 2:
-                buffer1 = pm.HalfNormal("buffer1", sigma=5)
-                tracked_var_names.append("buffer1")
-                mu1 = pm.Deterministic("mu1", mu0 - buffer1)
+                #buffer_b = pm.HalfNormal("buffer_b", sigma=5)
+                buffer_b = pm.TruncatedNormal("buffer_b", mu=20, sigma=5, lower=0)
+                buffer_m = pm.TruncatedNormal("buffer_m", mu=0.1, sigma=0.1, lower=0)
+                tracked_var_names.extend(["buffer_b", "buffer_m"])
+                # log_buffer = pm.HalfNormal("log_buffer", 20/np.exp(log_mu0))
+                
+                buffer1 = pm.Deterministic("buffer1", buffer_b + buffer_m * mu0)
+                mu1 = pm.Deterministic("mu1", mu0 + buffer1)
+                # log_mu1 = pm.Deterministic("log_mu1", log_mu0 - log_buffer)
                 
                 # Weights for multi-modal fits
-                w = pm.Dirichlet("w", np.ones(2))
+                w = pm.Dirichlet("w", [0.5, 0.5])
                 tracked_var_names.append("w")
                 
-                dists = [pm.Normal.dist(mu = mu0, sigma = sigma_fn),
-                         pm.Normal.dist(mu = mu1, sigma = sigma_fn)]
+                dists = [pm.Normal.dist(mu = mu0, sigma = 2),
+                         pm.Normal.dist(mu = mu1, sigma = 2)]
                 # likelihood = pm.Mixture("likelihood", w=w, comp_dists = dists,
                 #                         observed = np.zeros(n))
                 x = pm.Mixture.dist(w=w, comp_dists = dists)
-                likelihood = pm.Potential("likelihood", pm.logp(x, value = r_obs))
-            
+                likelihood = pm.Potential("likelihood", pm.logp(x, value = r))
+        
+        # Prior predictives-- check that the inputs are reasonable
         with test_potential:
-            idata = pm.sample(tune=512, draws=n_draws, chains=n_chains, cores=3,
+            prior_checks = pm.sample_prior_predictive(samples=10000)
+        prior = prior_checks.prior
+        
+        fig, axs = plt.subplots(nrows=3)
+        # Prior predictive plot 1: Does mu0 lie between upperbound and lowerbound?
+        axs[0].fill_between(np.arange(n), data_draw['r_lowerbound'].values, data_draw['r_upperbound'].values,
+                            color = 'green', alpha = 0.2)
+        mu0_levels = np.percentile(prior['mu0'].values[0], [10, 20, 30, 40, 50, 60, 70, 80, 90], axis=0)
+        axs[0].scatter(np.arange(n), mu0_levels[4], s=2, color='black')
+        
+        if 'mu1' in list(prior.variables):
+            mu1_levels = np.percentile(prior['mu1'].values[0], [10, 20, 30, 40, 50, 60, 70, 80, 90], axis=0)
+            axs[0].scatter(np.arange(n), mu0_levels[4], s=2, color='black', marker='x')
+        
+        # Plot 2: overall histograms
+        bins = np.arange(0, 1000, 10)
+        h = axs[1].hist(prior['mu0'].values.flatten(), bins,
+                        label = 'mu0 (Model Outputs)',
+                        histtype = 'step', lw = 2, density = True)
+        h = axs[1].hist(prior['r_obs'].values.flatten(), bins,
+                        label = 'r_obs (Possible Boundary Locations)',
+                        histtype = 'step', lw = 2, density = True)
+        axs[1].legend()
+        # Plot 3: sigma-normalized residuals
+        residuals = prior['mu0'].values[0] - prior['r_obs'].values[0]
+        norm_mean_residuals = np.mean(residuals, axis=0)/np.std(prior['r_obs'].values[0], axis=0)
+        axs[2].plot(norm_mean_residuals,
+                    label = 'Column-Mean Residuals, Normalized by the standard deviation of r_obs',
+                    color = 'C2')
+        axs[2].legend()
+        plt.show()
+        # breakpoint()
+        
+        # with test_potential:
+        #     mean_fit = pm.fit()
+        # approx_idata = mean_fit.sample(2000)
+        # approx_posterior = approx_idata.posterior
+        # vars_names_to_drop = list(set(list(approx_posterior.variables)) - set(tracked_var_names))
+        # approx_posterior = approx_posterior.drop_vars(var_names_to_drop)
+            
+        # breakpoint()
+        
+        with test_potential:
+            # 0.9 worked well for Joy+ models
+            # 0.95 works well for Shuelike + asymmetries (BS, MP)
+            step = pm.NUTS(max_treedepth=12, target_accept=0.90)
+            idata = pm.sample(tune=2000, draws=n_draws, chains=n_chains, cores=3,
                               var_names = tracked_var_names,
-                              target_accept=0.90)
+                              # init="advi")
+                              step = step)
                               # init = 'adapt_diag+jitter') # prevents 'jitter', which might move points init vals around too much here
             
+            # idata = pmjax.sample_numpyro_nuts(tune=2048, draws=n_draws, chains=n_chains,
+            #                                   var_names = tracked_var_names,
+            #                                   target_accept = 0.95)
+            
+            # step = pm.NUTS(max_treedepth=12, target_accept=0.95)
+            # idata = pm.sample(tune=1024, draws=n_draws, chains=n_chains, cores=3,
+            #                   var_names = tracked_var_names,
+            #                   # step = step,
+            #                   nuts_sampler="blackjax")
+            #                   # init = 'adapt_diag+jitter')
         posterior = idata.posterior
         posterior_list.append(posterior)
     
@@ -263,7 +422,7 @@ def _HybridMCMC_outdated(boundary, spacecraft_to_use, resolution,
     posterior_list = []    
     model_dict = BM.init(model_name)
     
-    model_sigma_value = 5
+    # model_sigma_value = 5
     # mu_sigma_values = (10, 5)
     
     print("Testing {} pressure draws".format(len(test_pressure_draws)))
@@ -370,7 +529,7 @@ def _HybridMCMC_outdated(boundary, spacecraft_to_use, resolution,
             # likelihood = pm.Potential("likelihood", pm.logp(pm.Normal.dist(mu = mu_pred + (sigma_dist * sigma_fn)), value=r_obs))
     
         with test_potential:
-            idata = pm.sample(tune=512, draws=n_draws, chains=n_chains, cores=3,
+            idata = pm.sample(tune=2048, draws=n_draws, chains=n_chains, cores=3,
                               var_names = tracked_var_names,
                               target_accept=0.80)
                               # init = 'adapt_diag+jitter') # prevents 'jitter', which might move points init vals around too much here
