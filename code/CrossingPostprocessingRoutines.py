@@ -137,7 +137,7 @@ def PostprocessCrossings(boundary = 'BS',
     bound_params = find_BoundarySurfaceLimits(positions_df, boundary, spacecraft_to_use)
 
     # Address class imbalance by selecting regions near the crossing events
-    balanced_positions_df = balance_Classes(positions_df, boundary, delta_around_crossing)
+    balanced_positions_df = balance_Classes(positions_df, boundary, delta_around_crossing, other_fraction)
     
     # Drop positions when we don't know which region we're in 
     balanced_positions_df = balanced_positions_df.query("region != UN")
@@ -162,10 +162,10 @@ def PostprocessCrossings(boundary = 'BS',
 def plot_UpperLowerLimits_Spatial():
     
     spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']   
-    resolution = '1Min'
+    resolution = '1Min' # !!! Change back to 1 min
     
     # Read Crossings
-    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=3))
+    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=1000))
     positions_df = positions_df.query("spacecraft in @spacecraft_to_use")
     # Replace datetime index with integers, deal with duplicated rows later
     positions_df = positions_df.reset_index(names='datetime')
@@ -177,135 +177,148 @@ def plot_UpperLowerLimits_Spatial():
                                            spacecraft_to_use)
     
     # Show the range of possible boundary surface locations
-    fig, axs = plt.subplots(nrows = 2, sharex = True,
-                            figsize = (6.5, 5))
-    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.7, top=0.98,
-                        hspace=0.08)
+    fig, axs = plt.subplots(nrows = 2, ncols = 2, #sharex='col',
+                            figsize = (9, 4.8))
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.76, top=0.98,
+                        hspace=0.08, wspace=0.12)
     
     # Set up each set of axes
-    x_label_centered_x = (axs[0].get_position()._points[0,0] + axs[0].get_position()._points[1,0])/2.
-    x_label_centered_y = (0 + axs[1].get_position()._points[0,1])/2.
+    ul = (axs[0,0].get_position()._points[0,0], axs[0,0].get_position()._points[1,1]) # upper left
+    lr = (axs[-1,-1].get_position()._points[1,0], axs[-1,-1].get_position()._points[0,1]) # lower right
+    
+    x_label_centered_x, x_label_centered_y = (ul[0] + lr[0])/2, lr[1]/2
     fig.supxlabel(r'$x_{JSS}$ [$R_J$] (+ toward Sun)', 
                   position = (x_label_centered_x, x_label_centered_y),
                   ha = 'center', va = 'top')
     
-    y_label_centered_x = (0 + axs[0].get_position()._points[0,0])/2.
-    y_label_centered_y = (axs[0].get_position()._points[1,1] + axs[1].get_position()._points[0,1])/2.
-    fig.supylabel(r'$\rho_{JSS} = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]', 
+    y_label_centered_x, y_label_centered_y = ul[0]/2, (ul[1] + lr[1])/2
+    fig.supylabel(r'$\rho = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]', 
                   position = (y_label_centered_x, y_label_centered_y),
                   ha = 'right', va = 'center')
     
-    axs[0].set(xlim = (300, -600),
-               ylim = (0, 500),
+    for ax in axs[:,0]:
+        ax.set(xlim = (250, -650),
+               ylim = (0, 600),
                aspect = 1)
-    axs[0].annotate('(a)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
-    axs[1].set(xlim = (300, -600),
-               ylim = (0, 500),
-               aspect = 1)
-    axs[1].annotate('(b)', (0,1), (0.5,-1.5), 'axes fraction', 'offset fontsize')
-
+    # for ax in axs[:,1]:
+    #     ax.set(xlim = (150, -150),
+    #            ylim = (0, 200),
+    #            aspect = 1)
+    axs[0,1].set(xlim = (180, -180),
+                 ylim = (0, 240),
+                 aspect = 1)
+    axs[1,1].set(xlim = (135, -135),
+                 ylim = (0, 180),
+                 aspect = 1)
+   
+    for ax, annotation in zip(axs.flatten(), ['a', 'b', 'c', 'd']):
+        ax.annotate('({})'.format(annotation), (0,1), (0.5,-1.5), 
+                    'axes fraction', 'offset fontsize')
+        
     #   Dummy coords for plotting
     t_plot = np.linspace(0, 0.995*np.pi, 1000)
     p_plot = np.zeros(1000) + np.pi/2
     p_dyn_plot = np.zeros(1000)
     coords_plot = (t_plot, p_plot, p_dyn_plot)
     
-    for ax, boundary, params in zip(axs, ['BS', 'MP'], [BS_params, MP_params]):
-        
-        # Plug in the params to get fit lines
-        fits = {}
-        for name in params.keys():
-            r_fit = BM.Shuelike(params[name], coords_plot)
-            rpl_fit = BM.convert_SphericalSolarToCylindricalSolar(r_fit, t_plot, p_plot)
-            
-            fits[name] = rpl_fit
-
-        # Plot orbital trajectories for each spacecraft individually
-        for spacecraft in spacecraft_to_use:
-            
-            subset_df = positions_df.query('spacecraft == @spacecraft')
-            
-            if boundary == 'BS':
-                boundary_entries_index = (subset_df['SW'].shift(1) == 1) & (subset_df['SW'] == 0)
-                boundary_exits_index = (subset_df['SW'].shift(1) == 0) & (subset_df['SW'] == 1)
-                outside_mask = subset_df['SW'] == 1
-                inside_mask = (subset_df['SH'] == 1) | (subset_df['MS'] == 1)
-            elif boundary == 'MP':
-                boundary_entries_index = (subset_df['MS'].shift(1) == 0) & (subset_df['MS'] == 1)
-                boundary_exits_index = (subset_df['MS'].shift(1) == 1) & (subset_df['MS'] == 0)
-                outside_mask = (subset_df['SW'] == 1) | (subset_df['SH'] == 1)
-                inside_mask = subset_df['MS'] == 1
-            breakpoint()
-            # Make DataFrames with NaNs where not in region, to make plotting easy
-            inside_df = subset_df[['spacecraft', 'rho', 'phi', 'ell']]
-            inside_df.loc[~inside_mask, ['rho', 'phi', 'ell']] = np.nan
-            
-            outside_df = subset_df[['spacecraft', 'rho', 'phi', 'ell']]
-            outside_df.loc[~outside_mask, ['rho', 'phi', 'ell']] = np.nan
-
-            # Ensure that we don't flip back and forth between coincident spacecraft
-            ax.plot(inside_df.query("spacecraft == @spacecraft")['ell'],
-                    inside_df.query("spacecraft == @spacecraft")['rho'],
-                    # label = '',
-                    color = sc_colors[spacecraft], lw = 1, ls = '--',
-                       zorder = 9)
-            ax.plot(outside_df.query("spacecraft == @spacecraft")['ell'],
-                    outside_df.query("spacecraft == @spacecraft")['rho'],
-                    label = '{} Trajectory'.format(spacecraft),
-                    color = sc_colors[spacecraft], lw = 1, ls = '-',
-                    zorder = 9)
-            
-            # Crossings
-            crossing_regions = ['SW', 'SH'] if boundary == 'BS' else ['SH', 'MS']
-            ax.scatter(subset_df.loc[boundary_entries_index, 'ell'], 
-                       subset_df.loc[boundary_entries_index, 'rho'],
-                       label = '{0} -> {1} Crossing'.format(*crossing_regions) if spacecraft == spacecraft_to_use[-1] else '',
-                       s = 16, color='#0001a7', marker='x', lw = 1,
-                       zorder = 10)
-            ax.scatter(subset_df.loc[boundary_exits_index, 'ell'], 
-                       subset_df.loc[boundary_exits_index, 'rho'],
-                       label = '{1} -> {0} Crossing'.format(*crossing_regions) if spacecraft == spacecraft_to_use[-1] else '',
-                       s = 16, edgecolor='#563ae2', facecolor='None', marker='o', lw = 1,
-                       zorder = 10)
-        
-        # Plot the fit boundaries
-        ax.plot(fits['upperfit'][2], fits['upperfit'][0],
-                color = 'black', linestyle = (0, (3, 1, 1, 1)),
-                label = 'Inclusive Fit: \n' + r'${0:.0f} \times \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{2}}}$'.format(*params['upperfit']))
-        ax.plot(fits['lowerfit'][2], fits['lowerfit'][0],
-                color = 'black', linestyle = (0, (3, 1, 1, 1, 1, 1)),
-                label = 'Exclusive Fit: \n' + r'${0:.0f} \times \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{2}}}$'.format(*params['lowerfit']))
-        
-        # Shade the padded, valid region
-        ax.fill(np.append(fits['upperbound'][2], np.flip(fits['lowerbound'][2])), 
-                np.append(fits['upperbound'][0], np.flip(fits['lowerbound'][0])),
-                color = 'black', alpha = 0.2, edgecolor = None,
-                label = 'Range of Possible \n{} Surfaces'.format('Bow Shock' if boundary == 'BS' else 'Magnetopause'))
-        ax.plot(np.append(fits['upperbound'][2], np.flip(fits['lowerbound'][2])),
-                np.append(fits['upperbound'][0], np.flip(fits['lowerbound'][0])),
-                color = 'xkcd:black', alpha=0.5, linestyle = '-',
-                label = r'_$\pm20\%$ around fits')
+    for ax_1d, boundary, params in zip(axs, ['BS', 'MP'], [BS_params, MP_params]):
+        for ax in ax_1d:
+            # Plug in the params to get fit lines
+            fits = {}
+            for name in params.keys():
+                r_fit = BM.Shuelike(params[name], coords_plot)
+                rpl_fit = BM.convert_SphericalSolarToCylindricalSolar(r_fit, t_plot, p_plot)
+                
+                fits[name] = rpl_fit
     
-        # Or, plot a residence plot?
+            # Plot orbital trajectories for each spacecraft individually
+            for spacecraft in spacecraft_to_use:
+                
+                subset_df = positions_df.query('spacecraft == @spacecraft')
+                
+                if boundary == 'BS':
+                    boundary_entries_index = (subset_df['SW'].shift(1) == 1) & (subset_df['SW'] == 0)
+                    boundary_exits_index = (subset_df['SW'].shift(1) == 0) & (subset_df['SW'] == 1)
+                    outside_mask = subset_df['SW'] == 1
+                    inside_mask = (subset_df['SH'] == 1) | (subset_df['MS'] == 1)
+                elif boundary == 'MP':
+                    boundary_entries_index = (subset_df['MS'].shift(1) == 0) & (subset_df['MS'] == 1)
+                    boundary_exits_index = (subset_df['MS'].shift(1) == 1) & (subset_df['MS'] == 0)
+                    outside_mask = (subset_df['SW'] == 1) | (subset_df['SH'] == 1)
+                    inside_mask = subset_df['MS'] == 1
+                
+                # Make DataFrames with NaNs where not in region, to make plotting easy
+                inside_df = subset_df[['spacecraft', 'rho', 'phi', 'ell']]
+                inside_df.loc[~inside_mask, ['rho', 'phi', 'ell']] = np.nan
+                
+                outside_df = subset_df[['spacecraft', 'rho', 'phi', 'ell']]
+                outside_df.loc[~outside_mask, ['rho', 'phi', 'ell']] = np.nan
+    
+                # Ensure that we don't flip back and forth between coincident spacecraft
+                ax.plot(inside_df.query("spacecraft == @spacecraft")['ell'],
+                        inside_df.query("spacecraft == @spacecraft")['rho'],
+                        # label = '',
+                        color = sc_colors[spacecraft], lw = 1, ls = '--',
+                           zorder = 9)
+                ax.plot(outside_df.query("spacecraft == @spacecraft")['ell'],
+                        outside_df.query("spacecraft == @spacecraft")['rho'],
+                        label = '{0} Trajectory'.format(spacecraft),
+                        color = sc_colors[spacecraft], lw = 1, ls = '-',
+                        zorder = 9)
+                
+                # Crossings
+                crossing_regions = ['SW', 'SH'] if boundary == 'BS' else ['SH', 'MS']
+                ax.scatter(subset_df.loc[boundary_entries_index, 'ell'], 
+                           subset_df.loc[boundary_entries_index, 'rho'],
+                           label = r'{0} $\rightarrow$ {1} Crossing'.format(*crossing_regions) if spacecraft == spacecraft_to_use[-1] else '',
+                           s = 16, color='#0001a7', marker='x', lw = 1,
+                           zorder = 10)
+                ax.scatter(subset_df.loc[boundary_exits_index, 'ell'], 
+                           subset_df.loc[boundary_exits_index, 'rho'],
+                           label = r'{1} $\rightarrow$ {0} Crossing'.format(*crossing_regions) if spacecraft == spacecraft_to_use[-1] else '',
+                           s = 16, edgecolor='#563ae2', facecolor='None', marker='o', lw = 1,
+                           zorder = 10)
+            
+            # Plot the fit boundaries
+            ax.plot(fits['upperfit'][2], fits['upperfit'][0],
+                    color = 'black', linestyle = (0, (3, 1, 1, 1)),
+                    # label = 'Inclusive Fit: \n' + r'${0:.0f} \times \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{2}}}$'.format(*params['upperfit']))
+                    label = r'Inclusive Fit: $F_{{S97}}({}, {}, {}, {})$'.format(*params['upperfit']))
+            ax.plot(fits['lowerfit'][2], fits['lowerfit'][0],
+                    color = 'black', linestyle = (0, (3, 1, 1, 1, 1, 1)),
+                    # label = 'Exclusive Fit: \n' + r'${0:.0f} \times \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{2}}}$'.format(*params['lowerfit']))
+                    label = r'Exclusive Fit: $F_{{S97}}({}, {}, {}, {})$'.format(*params['lowerfit']))
+            
+            # Shade the padded, valid region
+            ax.fill(np.append(fits['upperbound'][2], np.flip(fits['lowerbound'][2])), 
+                    np.append(fits['upperbound'][0], np.flip(fits['lowerbound'][0])),
+                    color = 'black', alpha = 0.2, edgecolor = None,
+                    label = 'Range of Possible \n{} Surfaces'.format('Bow Shock' if boundary == 'BS' else 'Magnetopause'))
+            ax.plot(np.append(fits['upperbound'][2], np.flip(fits['lowerbound'][2])),
+                    np.append(fits['upperbound'][0], np.flip(fits['lowerbound'][0])),
+                    color = 'xkcd:black', alpha=0.5, linestyle = '-',
+                    label = r'_$\pm20\%$ around fits')
         
+            # Or, plot a residence plot?
+            
         leg = ax.legend(scatterpoints=3, handlelength=3,
-                        loc='center left', bbox_to_anchor=(1.0, 0.5, 0.5, 0.0), 
+                        loc='center left', bbox_to_anchor=(1.0, 0.5, 0.75, 0.0), 
                         mode = 'expand')
         for line in leg.get_lines():
                 line.set_linewidth(2.0)
-
-        # x_joy = np.linspace(-150, 600, 10000)
-        # ps_dyn_joy = [0.08]
-        # for p_dyn_joy in ps_dyn_joy:
-        #     #   N-S boundary
-        #     z_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, y = 0)
-        #     ax.plot(x_joy, np.abs(z_joy[0]), color = 'C1', linestyle='--', lw=1.5,
-        #             label = r'N-S reference (Joy+ 2002)' ,zorder=8)
-        #     y_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, z = 0)
-        #     ax.plot(x_joy, np.abs(y_joy[0]), color = 'C3', linestyle='--',
-        #             label = r'Dusk reference (Joy+ 2002)', zorder=8)
-        #     ax.plot(x_joy, y_joy[1], color = 'C5', linestyle='--',
-        #             label = r'Dawn reference (Joy+ 2002)', zorder=8)
+    
+            # x_joy = np.linspace(-150, 600, 10000)
+            # ps_dyn_joy = [0.08]
+            # for p_dyn_joy in ps_dyn_joy:
+            #     #   N-S boundary
+            #     z_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, y = 0)
+            #     ax.plot(x_joy, np.abs(z_joy[0]), color = 'C1', linestyle='--', lw=1.5,
+            #             label = r'N-S reference (Joy+ 2002)' ,zorder=8)
+            #     y_joy = JBC.find_JoyBoundaries(p_dyn_joy, 'BS', x = x_joy, z = 0)
+            #     ax.plot(x_joy, np.abs(y_joy[0]), color = 'C3', linestyle='--',
+            #             label = r'Dusk reference (Joy+ 2002)', zorder=8)
+            #     ax.plot(x_joy, y_joy[1], color = 'C5', linestyle='--',
+            #             label = r'Dawn reference (Joy+ 2002)', zorder=8)
     
     plt.savefig("/Users/mrutala/projects/JupiterBoundaries/paper/figures/UpperLowerLimits_Spatial.png",
                 dpi=300)
@@ -597,28 +610,36 @@ def balance_Classes(df, boundary, delta, other_fraction=0.1):
 
 def add_Bounds(df, boundary, upperbound, lowerbound):
     
+    # Double-check that the df index is unique, otherwise this won't work
+    if not df.index.unique:
+        print("Invalid dataframe index values")
+        breakpoint()
+        
     # Coefficients affecting pressure should be 0 (no p_dyn dependence)
     coords = [df['t'].to_numpy(), df['p'].to_numpy(), np.zeros(len(df))+0.1]
     df.loc[:, 'r_upperbound'] = BM.Shuelike(upperbound, coords)
     df.loc[:, 'r_lowerbound'] = BM.Shuelike(lowerbound, coords)
     
     if boundary.lower() in ['bs', 'bow shock']:
-        in_sw_below_upperbound_index = df.query("r < r_upperbound & region == 'SW'").index # set upper bound
-        not_in_sw_above_lowerbound_index = df.query("r > r_lowerbound & region != 'SW'").index # set lower bound
+        # in_sw_below_upperbound_index = df.query("r < r_upperbound & region == 'SW'").index # set upper bound
+        # not_in_sw_above_lowerbound_index = df.query("r > r_lowerbound & region != 'SW'").index # set lower bound
+        # df.loc[in_sw_below_upperbound_index, 'r_upperbound'] = df.loc[in_sw_below_upperbound_index, 'r']
+        # df.loc[not_in_sw_above_lowerbound_index, 'r_lowerbound'] = df.loc[not_in_sw_above_lowerbound_index, 'r']
         
-        df.loc[in_sw_below_upperbound_index, 'r_upperbound'] = df.loc[in_sw_below_upperbound_index, 'r']
-        df.loc[not_in_sw_above_lowerbound_index, 'r_lowerbound'] = df.loc[not_in_sw_above_lowerbound_index, 'r']
-    elif boundary.lower() in ['mp', 'magnetopause']:
-        
-        # Not in MS, r > r_upperbound     -> do nothing
-        # Not in MS, but r < r_upperbound -> r_upperbound = r
-        qry = "(region != 'MS') & (r < r_upperbound)"
+        # Above the BS, but below the upperbound -> r_upperbound = r
+        qry = "(region == 'SW') & (r < r_upperbound)"
         df.loc[df.query(qry).index, 'r_upperbound'] = df.loc[df.query(qry).index, 'r']
-        # in MS, r < r_upperbound         -> r_lowerbound = r
-        # in MS, r > r_lowerbound         -> r_lowerbound = r
-        qry = "region == 'MS'"
+        # Below the BS, but above the lowerbound -> r_lowerbound = r
+        qry = "(region == 'SH') & (r > r_lowerbound)"
         df.loc[df.query(qry).index, 'r_lowerbound'] = df.loc[df.query(qry).index, 'r']
-
+        
+    elif boundary.lower() in ['mp', 'magnetopause']:
+        # Above the MP, but below the upperbound -> r_upperbound = r
+        qry = "(region == 'SH') & (r < r_upperbound)"
+        df.loc[df.query(qry).index, 'r_upperbound'] = df.loc[df.query(qry).index, 'r']
+        # Below the MP, but above the lowerbound -> r_lowerbound = r
+        qry = "(region == 'MS') & (r > r_lowerbound)"
+        df.loc[df.query(qry).index, 'r_lowerbound'] = df.loc[df.query(qry).index, 'r']
     else:
         print("Invalid boundary selection!")
         breakpoint()
