@@ -227,27 +227,26 @@ def read_Galileo_CrossingList():
 
 def read_Achilleos2004_CrossingList(bs=True):
     if bs == True:
-        boundary_filepath = get_paths()['Achilleos2004_bowshock']
+        crossing_filepath = get_paths()['Achilleos2004_bowshock']
     else:
         print("No magnetopause crossings available from this function!")
         return
     
     #   Interpreted from the .csv file
-    column_names = ['year', 'DoY', 'time', 'boundary', 'direction']
+    column_names = ['year', 'DoY', 'time', 'origin', 'destination']
    
     #   Read the boundary file, parse the index to datetimes
-    boundary_df = pd.read_csv(boundary_filepath, sep = ',', names = column_names, header = 0)
-    boundary_df.index = [dt.datetime.strptime('{}-{}T{}'.format(row['year'], row['DoY'], row['time']), '%Y-%jT%H:%M') for index, row in boundary_df.iterrows()]
-    boundary_df = boundary_df.sort_index()
+    crossing_df = pd.read_csv(crossing_filepath, sep = ',', names = column_names, header = 0)
+    crossing_df.index = [dt.datetime.strptime('{}-{}T{}'.format(row['year'], row['DoY'], row['time']), '%Y-%jT%H:%M') for index, row in crossing_df.iterrows()]
+    crossing_df = crossing_df.sort_index()
     
     #   Add required columns
-    boundary_df['boundary'] = 'bow shock'
-    boundary_df['notes'] = ''
-    boundary_df['source'] = 'Achilleos+ (2004)'
-    boundary_df['spacecraft'] = 'Cassini'
+    crossing_df['notes'] = ''
+    crossing_df['source'] = 'Achilleos+ (2004)'
+    crossing_df['spacecraft'] = 'Cassini'
     
     #   Convert from Boundaries to Crossings
-    crossing_df = convert_BoundariesToCrossings(boundary_df)
+    # crossing_df = convert_BoundariesToCrossings(boundary_df)
     return crossing_df
 
 def read_Louis2023_CrossingList(stoptime = None):
