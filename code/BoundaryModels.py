@@ -73,6 +73,160 @@ def convert_SphericalSolarToCylindricalSolar(r, t, p):
     
     return np.array([rho, phi, ell])
 
+def plot_CoordinateSystemsDiagram():
+    import numpy as np
+    from matplotlib import pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    from matplotlib.patches import FancyArrowPatch
+    from mpl_toolkits.mplot3d import proj3d
+    # Load custom plotting style
+    try:
+        plt.style.use('/Users/mrutala/code/python/mjr.mplstyle')
+    except:
+        pass
+
+    class Arrow3D(FancyArrowPatch):
+        def __init__(self, xs, ys, zs, *args, **kwargs):
+            super().__init__((0,0), (0,0), *args, **kwargs)
+            self._verts3d = xs, ys, zs
+    
+        def do_3d_projection(self, renderer=None):
+            xs3d, ys3d, zs3d = self._verts3d
+            xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
+            self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
+    
+            return np.min(zs)
+
+
+    fig = plt.figure(figsize=(3.5,3.5))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+
+    ax = fig.add_subplot(111, projection='3d', proj_type='ortho')
+    ax.set(xlim = (0,1.2), xticks=np.arange(0,1.2,0.1), xticklabels = [], 
+           ylim = (0,1.2), yticks=np.arange(0,1.2,0.1), yticklabels = [],
+           zlim = (0,1.2), zticks=np.arange(0,1.2,0.1), zticklabels = [])
+    ax.minorticks_off()
+    ax.get_xaxis().set_visible(False)
+    ax.set_box_aspect((1,1,1))
+    ax.view_init(elev=35, azim=45)
+    ax.plot((0, 0), (1.2, 1.2), (0, 1.2), color='black', lw=1, zorder=5)
+    ax.plot((0, 0), (0, 1.2), (1.2, 1.2), color='black', lw=1, zorder=5)
+    ax.plot((0, 1.2), (0, 0), (1.2, 1.2), color='black', lw=1, zorder=5)
+    
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+    
+    # Plot grid lines
+    for val in np.arange(0, 1.2, 0.1):
+        ax.plot([0, 0], [val, val], [0, 1.2], lw=0.5, color='#aaaaaa', zorder=-100)
+        ax.plot([0, 0], [0, 1.2], [val, val], lw=0.5, color='#aaaaaa', zorder=-100)
+        ax.plot([val, val], [0, 0], [0, 1.2], lw=0.5, color='#aaaaaa', zorder=-100)
+        ax.plot([0, 1.2], [0, 0], [val, val], lw=0.5, color='#aaaaaa', zorder=-100)
+        ax.plot([val, val], [0, 1.2], [0, 0], lw=0.5, color='#aaaaaa', zorder=-100)
+        ax.plot([0, 1.2], [val, val], [0, 0], lw=0.5, color='#aaaaaa', zorder=-100)
+        
+    
+    arrow_prop_dict = dict(mutation_scale=20, arrowstyle='-|>', color='k', shrinkA=0, shrinkB=0)
+    
+    # JSS x, y, z axes
+    x = Arrow3D([0,1], [0,0], [0,0], **arrow_prop_dict)
+    ax.text(0.9, 0, 0.1, r'$\hat{x}_{JSS}$', [1, 0, 0], ha='center', va='center', size='large')
+    y = Arrow3D([0,0], [0,1], [0,0], **arrow_prop_dict)
+    ax.text(0.1, 0.9, 0, r'$\hat{y}_{JSS}$', [0, 1, 0], ha='center', va='center', size='large')
+    z = Arrow3D([0,0], [0,0], [0,1], **arrow_prop_dict)
+    ax.text(0, 0.1, 0.9, r'$\hat{z}_{JSS}$', [0, 0, 1], ha='center', va='center', size='large')
+    for artist in [x, y, z]:
+        ax.add_artist(artist)
+        
+    # Solar Spherical r, theta, phi
+    poi = (1.1, 60, -60) # point of interest
+    poi_radians = (poi[0], np.radians(poi[1]), np.radians(poi[2]))
+    
+    x, y, z = convert_SphericalSolarToCartesian(np.array(poi_radians[0]), 
+                                                np.array(poi_radians[1]), 
+                                                np.array(poi_radians[2]))
+    
+    red = '#e50000'
+    blue = '#75bbfd'
+    purple = '#bf77f6'
+    
+    # Plot the vector
+    ax.plot([0, x], [0, y], [0, z], color=purple, zorder=0, lw=1)
+    ax.scatter([x], [y], [z], color=purple, s=16, edgecolors='black', lw=1, zorder=100)
+    ax.text(x+0.05, y-0.05, z, r'$r$', zorder=10, size='large', ha='center', va='center')
+    
+    # Plot rho component of the vector
+    ax.plot([0, 0], [0, y], [0, z], color=red, ls=':', lw=1, zorder=-10)
+    ax.text(0, y/2-0.075, z/2+0.025, r'$\rho$', size='large', ha='center', va='center')
+    
+    # Plot x component of the vector
+    ax.plot([0, x], [y, y], [z, z], color=blue, ls=':', lw=1, zorder=-10)
+    # No text
+    
+    # theta, in 3D
+    r, t, p = np.linspace(0.5, 0.5, 100), np.linspace(0, poi_radians[1], 100), np.zeros(100) + poi_radians[2]
+    x, y, z = convert_SphericalSolarToCartesian(r, t, p)
+    ax.plot(x, y, z,'k-', lw=1)
+    ax.text(x[50]+0.025, y[50]+0.1, z[50], r'$\theta$', size='large', ha='center', va='center')
+    
+    # phi, in 3D
+    r, t, p = np.linspace(0.5, 0.5, 100), np.linspace(np.pi/2, np.pi/2, 100), np.linspace(0, poi_radians[2], 100)
+    x, y, z = convert_SphericalSolarToCartesian(r, t, p)
+    ax.plot(x, y, z,'k-', lw=1)
+    ax.text(x[50], y[50]+0.05, z[50]+0.05, r'$-\phi$', size='large', ha='center', va='center')
+    
+    # r = Arrow3D([0, xyz_r[0]], [0, xyz_r[1]], [0, xyz_r[2]], **arrow_prop_dict)
+    # ax.add_artist(r)
+        
+    plt.show()
+    
+    # # Oblique Cavalier Projection
+    # import numpy as np
+    # import matplotlib.pyplot as plt
+    # from mpl_toolkits.mplot3d import Axes3D
+    
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d', proj_type='ortho')
+    
+    # # Some sample data
+    # x = [0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1]
+    # y = [0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1]
+    # z = [0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1]
+    
+    # # display data
+    # ax.scatter(x, y, z)
+    # ax.plot(x, y, z)
+    
+    # # set angle of the diagonal (63.4 = arctan(2))
+    # alpha = 63.4
+    
+    # # Set labels and view and lims
+    # ax.view_init(elev=alpha, azim=90-alpha)
+    
+    # ax.set(xlim = [0, 1.2], 
+    #        ylim = [0, 1.2],
+    #        zlim = [0, 1.2])
+    # # ax.tick_params(left = False, right = False, bottom = False, top = False,
+    # #                labelleft = False, labelbottom = False)
+    
+    # # Manual transformation matrix
+    # c = np.cos(np.deg2rad(alpha))
+    # s = np.sin(np.deg2rad(alpha))
+    # transform = np.array([
+    # [1, 0,  0, 0],
+    # [0,  1,  0, 0],
+    # [-c, s,  0, 0],
+    # [0,  0,  0, 1]
+    # ])
+    
+    
+    # breakpoint()
+    # # Apply the transformation
+    # ax.get_proj = lambda: np.dot(Axes3D.get_proj(ax), transform)
+    # # ax.set_aspect('equal')
+    # plt.show()
+
 
 # =============================================================================
 # Model lookup and initialization utilities
@@ -95,17 +249,29 @@ def init(model_name):
                                               'r1': pm.Normal,
                                               'a0': pm.InverseGamma,
                                               'a1': pm.Normal},
-                      'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                      'param_descriptions': {'r0': {'mu': 50, 'sigma': 20},
                                              'r1': {'mu': -0.25, 'sigma': 0.05},
                                              'a0': {'mu': 1, 'sigma': 0.5},
                                              'a1': {'mu': 0, 'sigma': 1}}
                       }
+    # bm['Shuelike_log'] = {'model': Shuelike_log,
+    #                   'param_dict': {},
+    #                   'param_distributions': {'r0': pm.Normal,
+    #                                           'r1': pm.Normal,
+    #                                           'a0': pm.LogNormal,
+    #                                           'a1': pm.Normal},
+    #                   'param_descriptions': {'r0': {'mu': 3.5, 'sigma': 0.5},
+    #                                          'r1': {'mu': -0.25, 'sigma': 0.05},
+    #                                          'a0': {'mu': 0, 'sigma': 0.25},
+    #                                          'a1': {'mu': 0, 'sigma': 1}}
+    #                   }
+    
     bm['Shuelike_r1fixed'] = {'model': Shuelike_r1fixed,
                               'param_dict': {},
                               'param_distributions': {'r0': pm.InverseGamma,
                                                       'a0': pm.InverseGamma,
                                                       'a1': pm.Normal},
-                              'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                              'param_descriptions': {'r0': {'mu': 50, 'sigma': 20},
                                                      'a0': {'mu': 1, 'sigma': 0.5},
                                                      'a1': {'mu': 0, 'sigma': 1}}
                               }
@@ -175,7 +341,7 @@ def init(model_name):
                                                           'r4': pm.Normal,
                                                           'a0': pm.InverseGamma,
                                                           'a1': pm.Normal},
-                                  'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                                  'param_descriptions': {'r0': {'mu': 50, 'sigma': 30},
                                                          'r1': {'mu': -0.2, 'sigma': 0.05},
                                                          'r2': {'mu': -10, 'sigma': 10},
                                                          'r3': {'mu': 0, 'sigma': 10},
@@ -193,7 +359,7 @@ def init(model_name):
                                                                   'r4': pm.Normal,
                                                                   'a0': pm.InverseGamma,
                                                                   'a1': pm.Normal},
-                                          'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                                          'param_descriptions': {'r0': {'mu': 50, 'sigma': 30},
                                                                  'r2': {'mu': -10, 'sigma': 10},
                                                                  'r3': {'mu': 0, 'sigma': 10},
                                                                  'r4': {'mu': 0, 'sigma': 10},
@@ -305,6 +471,51 @@ def Shuelike(parameters=[], coordinates=[], variables=False,
     # if return_a_f:
     #     return np.squeeze(np.array(a_f_arr))
     # return np.squeeze(np.array(r_arr))
+
+def Shuelike_log(parameters=[], coordinates=[], variables=False,
+             return_r_ss:bool=False, return_a_f:bool=False):
+    """
+    r = r_0 (2/(1 + cos(theta)))^alpha
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    # Optionally, return variables
+    if variables:
+        return ('t', 'p', 'log_p_dyn'), 'log_r'
+    
+    # Unpack coordinates
+    t, p, log_p_dyn = coordinates
+    log_r0, r1, a0, a1 = parameters
+    
+    # Calculate r_b & a_f, returning one if requested
+    p_dyn = np.exp(log_p_dyn)
+    r0 = np.exp(log_r0)
+    
+    r_ss = r0*((p_dyn)**(r1))
+    a_f = a0 + a1 * p_dyn
+    
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f
+    log_r = np.log(r)
+    
+    return log_r
+
 
 def Shuelike_r1fixed(parameters=[], coordinates=[], variables=False,
              return_r_b:bool=False, return_a_f:bool=False):
