@@ -36,6 +36,7 @@ def get_paths():
                                'Ebert_magnetopause': paths_dict['data'] / 'Ebert_JADE/Magnetopause_Crossings_Ebert2024_v5.csv',
                                'Ebert_bowshock': paths_dict['data'] / 'Ebert_JADE/Bowshock_Crossings_Ebert2024.csv',
                                'Achilleos2004_bowshock': paths_dict['data']/'Achilleos2004/BowShock_Crossings_Achilleos2004.csv',
+                               'Svenes2004_magnetopause': paths_dict['data']/'Svenes2004/Magnetopause_Crossings_Svenes2004.csv',
                                'Galileo_both': paths_dict['data']/'Galileo/GalileoCrossings.csv',
                                'Bame1992_bowshock': paths_dict['data']/'Bame1992/Crossings_Bame1992.csv'}
     
@@ -82,7 +83,7 @@ def convert_CrossingsToRegions(df, resolution = '60Min', padding = None):
     # For each row in the crossings df, set the times before and after
     for time, row in df.iterrows():
         
-        # As long as the input df is continuous, we only n
+        # As long as the input df is continuous,
         # we only need to do this the first time
         if time == df.index[0]:
             region_df.loc[region_df.query("index < @time").index, 'region'] = row['origin']
@@ -99,9 +100,7 @@ def convert_CrossingsToRegions(df, resolution = '60Min', padding = None):
     for region in ['SW', 'SH', 'MS', 'UN']:
         region_df.loc[:, region] = 0
         region_df.loc[region_df.query("region== @region").index, region] = 1
-        
-    region_df['source'] = df['source'].iloc[0]
-    
+
     region_to_num_dict = {'UN': -1,
                           'SW': 0,
                           'SH': 1,
@@ -249,6 +248,30 @@ def read_Achilleos2004_CrossingList(bs=True):
     # crossing_df = convert_BoundariesToCrossings(boundary_df)
     return crossing_df
 
+def read_Svenes2004_CrossingList(bs=False):
+    if bs == True:
+        print("No magnetopause crossings available from this function!")
+        return
+    else:
+        crossing_filepath = get_paths()['Svenes2004_magnetopause']
+    
+    #   Interpreted from the .csv file
+    column_names = ['year', 'DoY', 'time', 'origin', 'destination']
+   
+    #   Read the boundary file, parse the index to datetimes
+    crossing_df = pd.read_csv(crossing_filepath, sep = ',', names = column_names, header = 0)
+    crossing_df.index = [dt.datetime.strptime('{}-{}T{}'.format(row['year'], row['DoY'], row['time']), '%Y-%jT%H:%M') for index, row in crossing_df.iterrows()]
+    crossing_df = crossing_df.sort_index()
+    
+    #   Add required columns
+    crossing_df['notes'] = ''
+    crossing_df['source'] = 'Svenes+ (2004)'
+    crossing_df['spacecraft'] = 'Cassini'
+    
+    #   Convert from Boundaries to Crossings
+    # crossing_df = convert_BoundariesToCrossings(boundary_df)
+    return crossing_df
+
 def read_Louis2023_CrossingList(stoptime = None):
     mp_boundary_filepath = get_paths()['Louis2023_magnetopause']
     bs_boundary_filepath = get_paths()['Louis2023_bowshock']
@@ -334,7 +357,7 @@ def read_Ebert_CrossingList(mp=False, bs=True):
 # =============================================================================
 # Routines which concatenate DataFrames in useful ways
 # =============================================================================
-def make_CombinedCrossingsList(boundary = 'BS', which = ['Louis', 'Kurth', 'Ebert']):
+def make_CombinedCrossingsList(boundary = 'BS', which = ['Louis', 'Kurth', 'Ebert', 'Achilleos']):
     import spiceypy as spice
     
     match boundary.lower():
@@ -365,6 +388,9 @@ def make_CombinedCrossingsList(boundary = 'BS', which = ['Louis', 'Kurth', 'Eber
             if 'Ebert' in which:
                 crossing_data.append(read_Ebert_CrossingList(mp=True))
             
+            if 'Svenes' in which:
+                crossing_data.append(read_Svenes2004_CrossingList())
+                
             crossings_df = pd.concat(crossing_data, axis=0, join="outer")
         case _:
             crossings_df = None
@@ -505,7 +531,7 @@ def convert_BoundaryList_to_CrossingList(boundary_df):
     direction), generate a crossing list (indicating where the spacecraft was
     on either side of the crossing)
 
-    Parameters
+                                          Parameters
     ----------
     boundary_df : pandas DataFrame
         Minimially contains a datetime index, boundary name, and crossing direction
@@ -557,7 +583,9 @@ def read_AllCrossings(resolution='10Min',
     galileo_positions = get_SpacecraftPositions(galileo_regions, 'GLL')
     
     # Load Cassini crossings
-    cassini_crossings = read_Achilleos2004_CrossingList()
+    cassini_bowshock_crossings = read_Achilleos2004_CrossingList()
+    cassini_magnetopause_crossings = read_Svenes2004_CrossingList()
+    cassini_crossings = pd.concat([cassini_bowshock_crossings, cassini_magnetopause_crossings]).sort_index()
     cassini_regions = convert_CrossingsToRegions(cassini_crossings, resolution, symmetrical_padding)
     cassini_positions = get_SpacecraftPositions(cassini_regions, 'Cassini')
     
@@ -579,6 +607,7 @@ def read_AllCrossings(resolution='10Min',
 
 def plot_CrossingsAndTrajectories():
     import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap, LinearSegmentedColormap
     
     padding = dt.timedelta(hours=1000) # Only for flybys
     res = '10Min' # lower resolution than what we actually use, otherwise slow?
@@ -612,8 +641,8 @@ def plot_CrossingsAndTrajectories():
                       juno_positions]
     all_positions = pd.concat(positions_list)
     
-    rbin_step = 20
-    rbins = np.arange(0, 320, rbin_step)
+    rbin_step = 25
+    rbins = np.arange(0, 275, rbin_step)
     abin_step = 2*np.pi/48
     abins = np.arange(0, 2*np.pi + abin_step, abin_step)
     
@@ -651,15 +680,19 @@ def plot_CrossingsAndTrajectories():
                 SH_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("SH == 1"))/total_res
                 
                 #   How many SW points are in this bin?
-                MS_res[r_indx, a_indx] = len(equatorial_positions.query(qry).query("MS == 1"))/total_res
+                val =  len(equatorial_positions.query(qry).query("MS == 1"))/total_res
+                if val<0:
+                    breakpoint()
+                MS_res[r_indx, a_indx] = val
+                
      
             
     SW_res_masked = np.ma.masked_less(SW_res, 0)
     SH_res_masked = np.ma.masked_less(SH_res, 0)
     MS_res_masked = np.ma.masked_less(MS_res, 0)
     
-    rbin_step = 20
-    rbins = np.arange(0, 320, rbin_step)
+    rbin_step = 25
+    rbins = np.arange(0, 275, rbin_step)
     pbin_step = 2*np.pi/48
     pbins = np.arange(-np.pi, np.pi + pbin_step, pbin_step)
     x_limit = [-50,50]
@@ -701,59 +734,83 @@ def plot_CrossingsAndTrajectories():
     SH_res_xz_masked = np.ma.masked_less(SH_res_xz, 0)
     MS_res_xz_masked = np.ma.masked_less(MS_res_xz, 0)
     
-    cmap = plt.get_cmap('plasma')
+    YlOrRd = plt.get_cmap('YlOrRd')
+    colors = YlOrRd(np.linspace(0, 1, 256))
+    colors[0] = [0.58, 0.82, 0.99, 1] # light blue
+    cmap = ListedColormap(colors)
     cmap.set_bad('xkcd:light gray', alpha=0.5)
     
-    fig, axs = plt.subplots(ncols=3, nrows=2, figsize = (6,5),
+    fig, axs = plt.subplots(ncols=2, nrows=3, figsize = (6, 7.5),
                             subplot_kw={'projection':'polar'})
-    plt.subplots_adjust(left=0.12, bottom=0.04, right=0.96, top=0.78, 
-                        hspace=0.25, wspace=0.4)
+    plt.subplots_adjust(left=0.08, bottom=0.04, right=0.80, top=0.92, 
+                        hspace=0.25, wspace=0.25)
+    
+    # Label each column: LST and Angle
+    axs[0,0].annotate('Local Solar Time [Hours] \n(Viewed from North)', 
+                      (0.5, 1.2), (0,0),
+                      'axes fraction', 'offset fontsize', 
+                      rotation = 'horizontal', ha = 'center', va = 'center')
+    axs[0,1].annotate(r'Meridional Angle $\phi$ [$^\circ$]' + '\n(Viewed from the Sun)', 
+                      (0.5, 1.2), (0,0),
+                      'axes fraction', 'offset fontsize', 
+                      rotation = 'horizontal', ha = 'center', va = 'center')
+    
+    # Label the rows: SW, SH, MS
+    axs[0,0].annotate('In the Solar Wind', (-0.2, 0.5), (0,0),
+                      'axes fraction', 'offset fontsize',
+                      rotation = 'vertical', ha = 'center', va = 'center')
+    axs[1,0].annotate('In the Magnetosheath', (-0.2, 0.5), (0,0),
+                      'axes fraction', 'offset fontsize',
+                      rotation = 'vertical', ha = 'center', va = 'center')
+    axs[2,0].annotate('In the Magnetosphere', (-0.2, 0.5), (0,0),
+                      'axes fraction', 'offset fontsize',
+                      rotation = 'vertical', ha = 'center', va = 'center')
+    
     
     im = axs[0,0].pcolormesh(A, R, SW_res_masked, cmap=cmap, vmin=0, vmax=1)      
-    # axs[0,0].set_title('In the Solar Wind')
-    axs[0,0].annotate('In the Solar Wind', (0.5, 1.25), (0,0),
-                      'axes fraction', 'offset fontsize',
-                      rotation = 'horizontal', ha = 'center', va = 'center')
-    axs[0,0].annotate('Local Solar Time [Hours]', (-0.25,0.5), (0,0),
-                      'axes fraction', 'offset fontsize', 
-                      rotation = 'vertical', ha = 'center', va = 'center')
-    axs[1,0].annotate('Meridional Angle [$\circ$]', (-0.25,0.5), (0,0),
-                      'axes fraction', 'offset fontsize', 
-                      rotation = 'vertical', ha = 'center', va = 'center')
-    
-    axs[0,1].pcolormesh(A, R, SH_res_masked, cmap=cmap, vmin=0, vmax=1)     
+    axs[1,0].pcolormesh(A, R, SH_res_masked, cmap=cmap, vmin=0, vmax=1)     
     # axs[0,1].set_title('In the Magnetosheath')
-    axs[0,1].annotate('In the Magnetosheath', (0.5, 1.25), (0,0),
-                      'axes fraction', 'offset fontsize',
-                      rotation = 'horizontal', ha = 'center', va = 'center')
+    
      
-    axs[0,2].pcolormesh(A, R, MS_res_masked, cmap=cmap, vmin=0, vmax=1)     
+    axs[2,0].pcolormesh(A, R, MS_res_masked, cmap=cmap, vmin=0, vmax=1)     
     # axs[0,2].set_title('In the Magnetosphere')
-    axs[0,2].annotate('In the Magnetosphere', (0.5, 1.25), (0,0),
-                      'axes fraction', 'offset fontsize',
-                      rotation = 'horizontal', ha = 'center', va = 'center')
+    
 
-    axs[1,0].pcolormesh(P, R, SW_res_xz_masked, cmap=cmap, vmin=0, vmax=1)      
+    axs[0,1].pcolormesh(P, R, SW_res_xz_masked, cmap=cmap, vmin=0, vmax=1)      
     
     axs[1,1].pcolormesh(P, R, SH_res_xz_masked, cmap=cmap, vmin=0, vmax=1)     
      
-    axs[1,2].pcolormesh(P, R, MS_res_xz_masked, cmap=cmap, vmin=0, vmax=1)     
+    axs[2,1].pcolormesh(P, R, MS_res_xz_masked, cmap=cmap, vmin=0, vmax=1)     
 
     for ax in axs.flatten():
         ax.tick_params(axis='x', which='major', pad=0)
-        ax.set_rlabel_position(-30)
-    for ax in axs[0].flatten():
+    
+    import string
+    letters = string.ascii_lowercase
+    for num, ax in enumerate(axs[:,0].flatten()):
         ax.set(xticks = np.radians(np.arange(0, 360, 45)), 
                xticklabels = ['{:02d}'.format(t) for t in np.roll(np.arange(0, 24, 3), 0)])
-    for ax in axs[1].flatten():
+        ax.set_rlabel_position(30)
+        ax.annotate('({})'.format(letters[num]), 
+                    (0,1), (-1.5,1.5), 'axes fraction', 'offset fontsize',
+                    va = 'top', ha = 'left')
+    for num, ax in enumerate(axs[:,1].flatten()):
         ax.set_theta_offset(np.pi/2.)
+        ax.set_rlabel_position(-60)
+        ax.annotate('({})'.format(letters[num+3]), 
+                    (0,1), (-1.5,1.5), 'axes fraction', 'offset fontsize',
+                    va = 'top', ha = 'left')
     
-    cbar_ax = fig.add_axes([0.2, 0.9, 0.68, 0.04])
-    cbar = fig.colorbar(im, cax=cbar_ax, orientation='horizontal', ticklocation='bottom')
-    cbar_ax.set_title('Fraction of all Spacecraft Measurements')
+    cbar_ax = fig.add_axes([0.86, 0.1, 0.04, 0.76])
+    cbar = fig.colorbar(im, cax=cbar_ax, orientation='vertical', ticklocation='right', 
+                        extend = 'min', extendfrac=0.01, extendrect=True)
+    cbar_ax.set(ylabel = 'Fraction of Spacecraft Measurements (per cell)')
+    
+    plt.savefig('/Users/mrutala/projects/JupiterBoundaries/paper/figures/RegionResidence.png', dpi=300)
     
     plt.show()
-
+    
+    breakpoint()
     
 def orbital_plots():
     padding = dt.timedelta(hours=1000) # Only for flybys
