@@ -3,6 +3,7 @@
 code/.DS_Store
 code/__pycache__
 data/
+mmesh_run/
 posteriors/
 figures/
 paper/
