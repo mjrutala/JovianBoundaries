@@ -1,0 +1,8 @@
+.DS_Store
+.spyproject/
+code/.DS_Store
+code/__pycache__
+data/
+posteriors/
+figures/
+paper/
