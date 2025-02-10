@@ -127,24 +127,31 @@ def find_BoundarySurfaceLimits(df, boundary, spacecraft_to_use):
 def PostprocessCrossings(boundary = 'BS', 
                          spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno'],
                          delta_around_crossing = dt.timedelta(hours=500),
-                         other_fraction = 0.2):
+                         other_fraction = 0.2,
+                         exclusion_query = None):
     # Read Crossings
-    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = delta_around_crossing*2)
-    positions_df = positions_df.query("spacecraft in @spacecraft_to_use")
+    all_positions_df = preproc.read_AllCrossings(resolution = resolution, padding = delta_around_crossing*2)
+    all_positions_df = all_positions_df.query("spacecraft in @spacecraft_to_use")
     # Replace datetime index with integers, deal with duplicated rows later
-    positions_df = positions_df.reset_index(names='datetime')
+    all_positions_df = all_positions_df.reset_index(names='datetime')
     
+    # Drop positions when we don't know which region we're in 
+    positions_df = all_positions_df.query("region != 'UN'")
+    
+    # Calculate the equations describing the bounds
     bound_params = find_BoundarySurfaceLimits(positions_df, boundary, spacecraft_to_use)
+    
+    # Add the bounds to each entry in the df
+    positions_df = add_Bounds(positions_df, boundary, bound_params['upperbound'], bound_params['lowerbound'])
 
+    # Apply exclusion criteria if necessary, *BEFORE* class imbalance handling
+    if exclusion_query is not None:
+        positions_df = positions_df.query(exclusion_query)
+    
     # Address class imbalance by selecting regions near the crossing events
     balanced_positions_df = balance_Classes(positions_df, boundary, delta_around_crossing, other_fraction)
     
-    # Drop positions when we don't know which region we're in 
-    balanced_positions_df = balanced_positions_df.query("region != UN")
-    
-    # Add the bounds to each entry in the df
-    balanced_positions_df = add_Bounds(balanced_positions_df, boundary, bound_params['upperbound'], bound_params['lowerbound'])
-
+    # balanced_positions_df = add_Bounds(balanced_positions_df, boundary, bound_params['upperbound'], bound_params['lowerbound'])
     # boundary_timeseries_df = get_BoundsAsTimeSeries(balanced_positions_df)
     
     # Now add pressure information, since we have one set of bounds per time
@@ -160,12 +167,15 @@ def PostprocessCrossings(boundary = 'BS',
     return balanced_positions_df
 
 def plot_UpperLowerLimits_Spatial():
+    import matplotlib.patches as patches
+    from matplotlib.patches import ConnectionPatch
+    from matplotlib import colors
     
     spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']   
     resolution = '1Min' # !!! Change back to 1 min
     
     # Read Crossings
-    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=1000))
+    positions_df = preproc.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=10)) # 1000
     positions_df = positions_df.query("spacecraft in @spacecraft_to_use")
     # Replace datetime index with integers, deal with duplicated rows later
     positions_df = positions_df.reset_index(names='datetime')
@@ -179,7 +189,7 @@ def plot_UpperLowerLimits_Spatial():
     # Show the range of possible boundary surface locations
     fig, axs = plt.subplots(nrows = 2, ncols = 2, #sharex='col',
                             figsize = (9, 4.8))
-    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.76, top=0.98,
+    plt.subplots_adjust(left=0.12, bottom=0.08, right=0.80, top=0.98,
                         hspace=0.08, wspace=0.12)
     
     # Set up each set of axes
@@ -191,7 +201,7 @@ def plot_UpperLowerLimits_Spatial():
                   position = (x_label_centered_x, x_label_centered_y),
                   ha = 'center', va = 'top')
     
-    y_label_centered_x, y_label_centered_y = ul[0]/2, (ul[1] + lr[1])/2
+    y_label_centered_x, y_label_centered_y = ul[0]/4, (ul[1] + lr[1])/2
     fig.supylabel(r'$\rho = \sqrt{y_{JSS}^2 + z_{JSS}^2}$ [$R_J$]', 
                   position = (y_label_centered_x, y_label_centered_y),
                   ha = 'right', va = 'center')
@@ -204,11 +214,11 @@ def plot_UpperLowerLimits_Spatial():
     #     ax.set(xlim = (150, -150),
     #            ylim = (0, 200),
     #            aspect = 1)
-    axs[0,1].set(xlim = (180, -180),
-                 ylim = (0, 240),
+    axs[0,1].set(xlim = (150, -225),
+                 ylim = (0, 250),
                  aspect = 1)
-    axs[1,1].set(xlim = (135, -135),
-                 ylim = (0, 180),
+    axs[1,1].set(xlim = (150, -150),
+                 ylim = (0, 200),
                  aspect = 1)
    
     for ax, annotation in zip(axs.flatten(), ['a', 'b', 'c', 'd']):
@@ -283,11 +293,11 @@ def plot_UpperLowerLimits_Spatial():
             ax.plot(fits['upperfit'][2], fits['upperfit'][0],
                     color = 'black', linestyle = (0, (3, 1, 1, 1)),
                     # label = 'Inclusive Fit: \n' + r'${0:.0f} \times \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{2}}}$'.format(*params['upperfit']))
-                    label = r'Inclusive Fit: $F_{{S97}}({}, {}, {}, {})$'.format(*params['upperfit']))
+                    label = r'$v_{{S97}} = ({}, {}, {}, {})$'.format(*params['upperfit']))
             ax.plot(fits['lowerfit'][2], fits['lowerfit'][0],
                     color = 'black', linestyle = (0, (3, 1, 1, 1, 1, 1)),
                     # label = 'Exclusive Fit: \n' + r'${0:.0f} \times \left( \frac{{2}}{{1 + cos(\theta)}} \right)^{{{2}}}$'.format(*params['lowerfit']))
-                    label = r'Exclusive Fit: $F_{{S97}}({}, {}, {}, {})$'.format(*params['lowerfit']))
+                    label = r'$v_{{S97}} = ({}, {}, {}, {})$'.format(*params['lowerfit']))
             
             # Shade the padded, valid region
             ax.fill(np.append(fits['upperbound'][2], np.flip(fits['lowerbound'][2])), 
@@ -298,12 +308,39 @@ def plot_UpperLowerLimits_Spatial():
                     np.append(fits['upperbound'][0], np.flip(fits['lowerbound'][0])),
                     color = 'xkcd:black', alpha=0.5, linestyle = '-',
                     label = r'_$\pm20\%$ around fits')
+
+        # Add the patch to the Axes
+        if boundary == 'BS':
+            rect = patches.Rectangle((-225, 0), 375, 250, linewidth=1, edgecolor='xkcd:cornflower blue', facecolor=colors.to_rgba("xkcd:cornflower blue", alpha=0.25), zorder=-16)
+            leg_title = 'Bow Shock'
+        else:
+            rect = patches.Rectangle((-150, 0), 300, 200, linewidth=1, edgecolor='xkcd:cornflower blue', facecolor=colors.to_rgba("xkcd:cornflower blue", alpha=0.25), zorder=-16)
+            leg_title = 'Magnetopause'
+        ax_1d[0].add_patch(rect)
+        # ax_1d[0].annotate(leg_title, (0, 0.5), (-4, 0), 
+        #                   xycoords='axes fraction', textcoords='offset fontsize', 
+        #                   rotation = 'vertical', va='center', ha='center')
+        ax_1d[0].set_ylabel(leg_title, size='large')
         
-            # Or, plot a residence plot?
-            
-        leg = ax.legend(scatterpoints=3, handlelength=3,
-                        loc='center left', bbox_to_anchor=(1.0, 0.5, 0.75, 0.0), 
-                        mode = 'expand')
+        # Connect the cut-out plot and make the same color
+        connector1 = ConnectionPatch(xyA=(rect._x0,0), xyB=(0,0), 
+                                     coordsA="data", coordsB="axes fraction", 
+                                     axesA=ax_1d[0], axesB=ax_1d[1],
+                                     color="xkcd:cornflower blue", zorder=-16)
+        connector2 = ConnectionPatch(xyA=(rect._x0,rect._y0+rect._height), xyB=(0,1), 
+                                     coordsA="data", coordsB="axes fraction", 
+                                     axesA=ax_1d[0], axesB=ax_1d[1], 
+                                     color="xkcd:cornflower blue", zorder=-16)
+        ax_1d[1].add_artist(connector1)
+        ax_1d[1].add_artist(connector2)
+        ax_1d[1].set_axisbelow(False)
+        
+        for spine in ['left', 'right', 'bottom', 'top']:
+            ax_1d[1].spines[spine].set_color('xkcd:cornflower blue')
+        
+        leg = ax_1d[1].legend(scatterpoints=3, handlelength=3,
+                              loc='upper left', bbox_to_anchor=(1, 1.03, 0.62, 0.0), 
+                              mode = 'expand')
         for line in leg.get_lines():
                 line.set_linewidth(2.0)
     
@@ -326,7 +363,7 @@ def plot_UpperLowerLimits_Spatial():
     
     breakpoint()
     
-def plot_UpperLowerLimits_Temporal():
+def plot_UpperLowerLimits_Temporal(): 
     
     spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
     delta_around_crossing = dt.timedelta(hours=500)
@@ -439,8 +476,8 @@ def plot_UpperLowerLimits_Temporal():
     breakpoint()
 def plot_Crossings():
     
-    # spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
-    spacecraft_to_use = ['Galileo', 'Juno']    
+    spacecraft_to_use = ['Ulysses', 'Galileo', 'Cassini', 'Juno']
+    # spacecraft_to_use = ['Galileo', 'Juno']    
     
     # Read Crossings
     positions_df = preproc.read_AllCrossings(resolution = resolution, padding = dt.timedelta(hours=3000))
@@ -580,7 +617,10 @@ def balance_Classes(df, boundary, delta, other_fraction=0.1):
     crossings_datetimes = []
     for sc in set(df['spacecraft']):
         subset_df = df.query("spacecraft == @sc")
-        
+        if len(subset_df.query("region == 'UN'")) > 0:
+            print("There shouldn't be any unknown regions to balance classes...")
+            breakpoint()
+            
         if boundary.lower() in ['bs', 'bow shock']:
             crossings_bool = np.diff(subset_df['SW'].to_numpy(), prepend=1) != 0
         elif boundary.lower() in ['mp', 'magnetopause']:
@@ -611,12 +651,12 @@ def balance_Classes(df, boundary, delta, other_fraction=0.1):
 def add_Bounds(df, boundary, upperbound, lowerbound):
     
     # Double-check that the df index is unique, otherwise this won't work
-    if not df.index.unique:
+    if not df.index.is_unique:
         print("Invalid dataframe index values")
         breakpoint()
         
     # Coefficients affecting pressure should be 0 (no p_dyn dependence)
-    coords = [df['t'].to_numpy(), df['p'].to_numpy(), np.zeros(len(df))+0.1]
+    coords = [df['t'].to_numpy('float64'), df['p'].to_numpy('float64'), np.zeros(len(df))+0.1]
     df.loc[:, 'r_upperbound'] = BM.Shuelike(upperbound, coords)
     df.loc[:, 'r_lowerbound'] = BM.Shuelike(lowerbound, coords)
     
