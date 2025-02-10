@@ -109,9 +109,12 @@ def plot_CoordinateSystemsDiagram():
     ax.get_xaxis().set_visible(False)
     ax.set_box_aspect((1,1,1))
     ax.view_init(elev=35, azim=45)
-    ax.plot((0, 0), (1.2, 1.2), (0, 1.2), color='black', lw=1, zorder=5)
-    ax.plot((0, 0), (0, 1.2), (1.2, 1.2), color='black', lw=1, zorder=5)
-    ax.plot((0, 1.2), (0, 0), (1.2, 1.2), color='black', lw=1, zorder=5)
+    ax.plot((0, 0), (1.2, 1.2), (0, 1.2), color='black', lw=1, zorder=-16)
+    ax.plot((0, 0), (0, 1.2), (1.2, 1.2), color='black', lw=1, zorder=-16)
+    ax.plot((0, 1.2), (0, 0), (1.2, 1.2), color='black', lw=1, zorder=-16)
+    ax.plot((1.2, 1.2), (0, 0), (1.2, 0), color='black', lw=1, zorder=-16)
+    ax.plot((1.2, 1.2), (0, 1.2), (0, 0), color='black', lw=1, zorder=-16)
+    ax.plot((1.2, 0), (1.2, 1.2), (0, 0), color='black', lw=1, zorder=-16)
     
     ax.set_xticks([])
     ax.set_yticks([])
@@ -119,12 +122,12 @@ def plot_CoordinateSystemsDiagram():
     
     # Plot grid lines
     for val in np.arange(0, 1.2, 0.1):
-        ax.plot([0, 0], [val, val], [0, 1.2], lw=0.5, color='#aaaaaa', zorder=-100)
-        ax.plot([0, 0], [0, 1.2], [val, val], lw=0.5, color='#aaaaaa', zorder=-100)
-        ax.plot([val, val], [0, 0], [0, 1.2], lw=0.5, color='#aaaaaa', zorder=-100)
-        ax.plot([0, 1.2], [0, 0], [val, val], lw=0.5, color='#aaaaaa', zorder=-100)
-        ax.plot([val, val], [0, 1.2], [0, 0], lw=0.5, color='#aaaaaa', zorder=-100)
-        ax.plot([0, 1.2], [val, val], [0, 0], lw=0.5, color='#aaaaaa', zorder=-100)
+        ax.plot([0, 0], [val, val], [0, 1.2], lw=0.5, color='#aaaaaa', zorder=-64)
+        ax.plot([0, 0], [0, 1.2], [val, val], lw=0.5, color='#aaaaaa', zorder=-64)
+        ax.plot([val, val], [0, 0], [0, 1.2], lw=0.5, color='#aaaaaa', zorder=-64)
+        ax.plot([0, 1.2], [0, 0], [val, val], lw=0.5, color='#aaaaaa', zorder=-64)
+        ax.plot([val, val], [0, 1.2], [0, 0], lw=0.5, color='#aaaaaa', zorder=-64)
+        ax.plot([0, 1.2], [val, val], [0, 0], lw=0.5, color='#aaaaaa', zorder=-64)
         
     
     arrow_prop_dict = dict(mutation_scale=20, arrowstyle='-|>', color='k', shrinkA=0, shrinkB=0)
@@ -139,6 +142,9 @@ def plot_CoordinateSystemsDiagram():
     for artist in [x, y, z]:
         ax.add_artist(artist)
         
+    ax.text(0.9, 0, 0.2, r'$\leftarrow$ to Sun', [1, 0, 0], ha='center', va='center', size='large')
+     
+    # "Point of interest"
     # Solar Spherical r, theta, phi
     poi = (1.1, 60, -60) # point of interest
     poi_radians = (poi[0], np.radians(poi[1]), np.radians(poi[2]))
@@ -151,81 +157,38 @@ def plot_CoordinateSystemsDiagram():
     blue = '#75bbfd'
     purple = '#bf77f6'
     
+    # Plot Jupiter
+    ax.plot([0], [0], [0], marker='o', markersize=8, color='xkcd:peach', zorder=128)
+    
     # Plot the vector
-    ax.plot([0, x], [0, y], [0, z], color=purple, zorder=0, lw=1)
-    ax.scatter([x], [y], [z], color=purple, s=16, edgecolors='black', lw=1, zorder=100)
+    ax.plot([0, x], [0, y], [0, z], color=purple, lw=2, zorder=4)
+    ax.scatter([x], [y], [z], color=purple, s=24, edgecolors='black', lw=1, zorder=16)
     ax.text(x+0.05, y-0.05, z, r'$r$', zorder=10, size='large', ha='center', va='center')
     
     # Plot rho component of the vector
-    ax.plot([0, 0], [0, y], [0, z], color=red, ls=':', lw=1, zorder=-10)
+    ax.plot([0, 0], [0, y], [0, z], color=red, ls=':', lw=2, zorder=8)
     ax.text(0, y/2-0.075, z/2+0.025, r'$\rho$', size='large', ha='center', va='center')
     
     # Plot x component of the vector
-    ax.plot([0, x], [y, y], [z, z], color=blue, ls=':', lw=1, zorder=-10)
+    ax.plot([0, x], [y, y], [z, z], color=blue, ls=':', lw=2, zorder=8)
     # No text
     
     # theta, in 3D
     r, t, p = np.linspace(0.5, 0.5, 100), np.linspace(0, poi_radians[1], 100), np.zeros(100) + poi_radians[2]
     x, y, z = convert_SphericalSolarToCartesian(r, t, p)
-    ax.plot(x, y, z,'k-', lw=1)
+    ax.plot(x, y, z,'k-', lw=1, zorder=2)
     ax.text(x[50]+0.025, y[50]+0.1, z[50], r'$\theta$', size='large', ha='center', va='center')
     
     # phi, in 3D
     r, t, p = np.linspace(0.5, 0.5, 100), np.linspace(np.pi/2, np.pi/2, 100), np.linspace(0, poi_radians[2], 100)
     x, y, z = convert_SphericalSolarToCartesian(r, t, p)
-    ax.plot(x, y, z,'k-', lw=1)
+    ax.plot(x, y, z,'k-', lw=1, zorder=2)
     ax.text(x[50], y[50]+0.05, z[50]+0.05, r'$-\phi$', size='large', ha='center', va='center')
     
     # r = Arrow3D([0, xyz_r[0]], [0, xyz_r[1]], [0, xyz_r[2]], **arrow_prop_dict)
     # ax.add_artist(r)
         
     plt.show()
-    
-    # # Oblique Cavalier Projection
-    # import numpy as np
-    # import matplotlib.pyplot as plt
-    # from mpl_toolkits.mplot3d import Axes3D
-    
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d', proj_type='ortho')
-    
-    # # Some sample data
-    # x = [0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1]
-    # y = [0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1]
-    # z = [0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1]
-    
-    # # display data
-    # ax.scatter(x, y, z)
-    # ax.plot(x, y, z)
-    
-    # # set angle of the diagonal (63.4 = arctan(2))
-    # alpha = 63.4
-    
-    # # Set labels and view and lims
-    # ax.view_init(elev=alpha, azim=90-alpha)
-    
-    # ax.set(xlim = [0, 1.2], 
-    #        ylim = [0, 1.2],
-    #        zlim = [0, 1.2])
-    # # ax.tick_params(left = False, right = False, bottom = False, top = False,
-    # #                labelleft = False, labelbottom = False)
-    
-    # # Manual transformation matrix
-    # c = np.cos(np.deg2rad(alpha))
-    # s = np.sin(np.deg2rad(alpha))
-    # transform = np.array([
-    # [1, 0,  0, 0],
-    # [0,  1,  0, 0],
-    # [-c, s,  0, 0],
-    # [0,  0,  0, 1]
-    # ])
-    
-    
-    # breakpoint()
-    # # Apply the transformation
-    # ax.get_proj = lambda: np.dot(Axes3D.get_proj(ax), transform)
-    # # ax.set_aspect('equal')
-    # plt.show()
 
 
 # =============================================================================
@@ -245,11 +208,11 @@ def init(model_name):
     
     bm['Shuelike'] = {'model': Shuelike,
                       'param_dict': {},
-                      'param_distributions': {'r0': pm.InverseGamma,
+                      'param_distributions': {'r0': pm.Gamma,
                                               'r1': pm.Normal,
-                                              'a0': pm.InverseGamma,
+                                              'a0': pm.Gamma,
                                               'a1': pm.Normal},
-                      'param_descriptions': {'r0': {'mu': 50, 'sigma': 20},
+                      'param_descriptions': {'r0': {'mu': 40, 'sigma': 20},
                                              'r1': {'mu': -0.25, 'sigma': 0.05},
                                              'a0': {'mu': 1, 'sigma': 0.5},
                                              'a1': {'mu': 0, 'sigma': 1}}
@@ -268,11 +231,11 @@ def init(model_name):
     
     bm['Shuelike_r1fixed'] = {'model': Shuelike_r1fixed,
                               'param_dict': {},
-                              'param_distributions': {'r0': pm.InverseGamma,
-                                                      'a0': pm.InverseGamma,
+                              'param_distributions': {'r0': pm.Gamma,
+                                                      'a0': pm.Gamma,
                                                       'a1': pm.Normal},
-                              'param_descriptions': {'r0': {'mu': 50, 'sigma': 20},
-                                                     'a0': {'mu': 1, 'sigma': 0.5},
+                              'param_descriptions': {'r0': {'mu': 30, 'sigma': 15},
+                                                     'a0': {'mu': 0.8, 'sigma': 0.4},
                                                      'a1': {'mu': 0, 'sigma': 1}}
                               }
     bm['Joylike'] = {'model': Joylike,
@@ -341,13 +304,13 @@ def init(model_name):
                                                           'r4': pm.Normal,
                                                           'a0': pm.InverseGamma,
                                                           'a1': pm.Normal},
-                                  'param_descriptions': {'r0': {'mu': 50, 'sigma': 30},
+                                  'param_descriptions': {'r0': {'mu': 50, 'sigma': 10},
                                                          'r1': {'mu': -0.2, 'sigma': 0.05},
-                                                         'r2': {'mu': -10, 'sigma': 10},
+                                                         'r2': {'mu': -5, 'sigma': 3},
                                                          'r3': {'mu': 0, 'sigma': 10},
                                                          'r4': {'mu': 0, 'sigma': 10},
-                                                         'a0': {'mu': 1.0, 'sigma': 0.5},
-                                                         'a1': {'mu': 0, 'sigma': 1}}
+                                                         'a0': {'mu': 0.75, 'sigma': 0.25},
+                                                         'a1': {'mu': -1.0, 'sigma': 2.0}}
                                   }
     
     bm['Shuelike_rasymmetric_r1fixed'] = {'model': Shuelike_rasymmetric_r1fixed, 
@@ -355,18 +318,145 @@ def init(model_name):
                                           'param_dict': {},
                                           'param_distributions': {'r0': pm.InverseGamma,
                                                                   'r2': pm.Normal,
+                                                                  'r2_scale': pm.Gamma,
                                                                   'r3': pm.Normal,
                                                                   'r4': pm.Normal,
                                                                   'a0': pm.InverseGamma,
                                                                   'a1': pm.Normal},
                                           'param_descriptions': {'r0': {'mu': 50, 'sigma': 30},
-                                                                 'r2': {'mu': -10, 'sigma': 10},
-                                                                 'r3': {'mu': 0, 'sigma': 10},
-                                                                 'r4': {'mu': 0, 'sigma': 10},
+                                                                 'r2': {'mu': -5, 'sigma': 3},
+                                                                 'r2_scale': {'mu': 0.1, 'sigma':0.1},
+                                                                 'r3': {'mu': 10, 'sigma': 10},
+                                                                 'r4': {'mu': 10, 'sigma': 10},
                                                                  'a0': {'mu': 1.0, 'sigma': 0.5},
-                                                                 'a1': {'mu': 0, 'sigma': 1}}
+                                                                 'a1': {'mu': -1.0, 'sigma': 1.0}}
+                                  }
+    bm['Shuelike_rasymmetric_simple'] = {'model': Shuelike_rasymmetric_simple, 
+                                          'model_number': 3,
+                                          'param_dict': {},
+                                          'param_distributions': {'r0': pm.InverseGamma,
+                                                                  'r3': pm.Normal,
+                                                                  'r4': pm.Normal,
+                                                                  'a0': pm.InverseGamma,
+                                                                  'a1': pm.Normal},
+                                          'param_descriptions': {'r0': {'mu': 30, 'sigma': 30},
+                                                                 'r3': {'mu': 10, 'sigma': 10},
+                                                                 'r4': {'mu': 10, 'sigma': 10},
+                                                                 'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                                 'a1': {'mu': -1.0, 'sigma': 1.0}}
+                                  }
+    bm['Shuelike_aasymmetric_r1fixed'] = {'model': Shuelike_aasymmetric_r1fixed, 
+                                          'model_number': 3,
+                                          'param_dict': {},
+                                          'param_distributions': {'r0': pm.InverseGamma,
+                                                                  'a0': pm.InverseGamma,
+                                                                  'a1': pm.Normal,
+                                                                  'a2': pm.Beta,
+                                                                  'a3': pm.Beta,
+                                                                  'a4': pm.Beta},
+                                          'param_descriptions': {'r0': {'mu': 50, 'sigma': 30},
+                                                                 'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                                 'a1': {'mu': -1.0, 'sigma': 1.0},
+                                                                 'a2': {'alpha': 2.0, 'beta': 5.0},
+                                                                 'a3': {'alpha': 2.0, 'beta': 5.0},
+                                                                 'a4': {'alpha': 2.0, 'beta': 5.0},}
                                   }
     
+    
+    
+    
+    
+    bm['ShuelikeAsymmetric'] = {'model': ShuelikeAsymmetric, 
+                                'model_number': 3,
+                                'param_dict': {},
+                                'param_distributions': {'r0': pm.Gamma,
+                                                        'r1': pm.Normal,
+                                                        'r2': pm.Gamma,
+                                                        'r3': pm.Gamma,
+                                                        'a0': pm.Gamma,
+                                                        'a1': pm.Normal},
+                                'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                                                       'r1': {'mu':-0.25, 'sigma':0.03},
+                                                       'r2': {'mu': 10, 'sigma': 10},
+                                                       'r3': {'mu': 10, 'sigma': 10},
+                                                       'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                       'a1': {'mu': -1.0, 'sigma': 1.0}}
+                                }
+    bm['ShuelikeAsymmetric_r1fixed'] = {'model': ShuelikeAsymmetric_r1fixed, 
+                                              'model_number': 3,
+                                              'param_dict': {},
+                                              'param_distributions': {'r0': pm.Gamma,
+                                                                      'r2': pm.Gamma,
+                                                                      'r3': pm.Gamma,
+                                                                      'a0': pm.Gamma,
+                                                                      'a1': pm.Normal},
+                                              'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                                                                     'r2': {'mu': 10, 'sigma': 10},
+                                                                     'r3': {'mu': 10, 'sigma': 10},
+                                                                     'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                                     'a1': {'mu': -1.0, 'sigma': 1.0}}
+                                              }
+    bm['ShuelikeAsymmetric_AsPerturbation'] = {'model': ShuelikeAsymmetric_AsPerturbation, 
+                                               'model_number': 3,
+                                               'param_dict': {},
+                                               'param_distributions': {'r0': pm.Gamma,
+                                                                       'r1': pm.Normal,
+                                                                       'r2': pm.Gamma,
+                                                                       'r3': pm.Gamma,
+                                                                       'a0': pm.Gamma,
+                                                                       'a1': pm.Normal},
+                                               'param_descriptions': {'r0': {'mu': 60, 'sigma': 30},
+                                                                      'r1': {'mu':-0.25, 'sigma':0.03},
+                                                                      'r2': {'mu': 10, 'sigma': 10},
+                                                                      'r3': {'mu': 10, 'sigma': 10},
+                                                                      'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                                      'a1': {'mu': -1.0, 'sigma': 1.0}}
+                                               }
+    # bm['ShuelikeAsymmetric_AsPerturbation_r1fixed'] = {'model': ShuelikeAsymmetric_AsPerturbation_r1fixed, 
+    #                                                    'model_number': 3,
+    #                                                    'param_dict': {},
+    #                                                    'param_distributions': {'r0': pm.Gamma,
+    #                                                                            'r2': pm.Gamma,
+    #                                                                            'r3': pm.Gamma,
+    #                                                                            'a0': pm.Gamma,
+    #                                                                            'a1': pm.Normal},
+    #                                                    'param_descriptions': {'r0': {'mu': 40, 'sigma': 15},
+    #                                                                           'r2': {'mu': 10, 'sigma': 10},
+    #                                                                           'r3': {'mu': 10, 'sigma': 10},
+    #                                                                           'a0': {'mu': 1.0, 'sigma': 0.5},
+    #                                                                           'a1': {'mu': -1.0, 'sigma': 1.0}}
+    #                                                    }
+    bm['ShuelikeAsymmetric_AsPerturbation_2'] = {'model': ShuelikeAsymmetric_AsPerturbation_2, 
+                                                 'model_number': 3,
+                                                 'param_dict': {},
+                                                 'param_distributions': {'r0': pm.Gamma,
+                                                                         'r1': pm.Normal,
+                                                                         'r2': pm.Gamma,
+                                                                         'r3': pm.Gamma,
+                                                                         'a0': pm.Gamma,
+                                                                         'a1': pm.Normal},
+                                                 'param_descriptions': {'r0': {'mu': 40, 'sigma': 20},
+                                                                        'r1': {'mu': -0.25, 'sigma':0.03},
+                                                                        'r2': {'mu': 10, 'sigma': 10},
+                                                                        'r3': {'mu': 10, 'sigma': 10},
+                                                                        'a0': {'mu': 1.0, 'sigma': 0.5},
+                                                                        'a1': {'mu': 0, 'sigma': 1.0}}
+                                                 }
+    bm['ShuelikeAsymmetric_AsPerturbation_r1fixed_2'] = {'model': ShuelikeAsymmetric_AsPerturbation_r1fixed_2, 
+                                                       'model_number': 3,
+                                                       'param_dict': {},
+                                                       'param_distributions': {'r0': pm.Gamma,
+                                                                               'r2': pm.Gamma,
+                                                                               'r3': pm.Gamma,
+                                                                               'a0': pm.Gamma,
+                                                                               'a1': pm.Normal},
+                                                       'param_descriptions': {'r0': {'mu': 30, 'sigma': 10},
+                                                                              'r2': {'mu': 10, 'sigma': 10},
+                                                                              'r3': {'mu': 10, 'sigma': 10},
+                                                                              'a0': {'mu': 1.0, 'sigma': 0.2},
+                                                                              'a1': {'mu': 0, 'sigma': 2.0}}
+                                                       }
+       
     return bm[model_name]
           
 # =============================================================================
@@ -585,7 +675,10 @@ def Shuelike_rasymmetric(parameters=[], coordinates=[], variables=False,
     sg_pos = (np.sign(np.sin(p)) + 1)/2
     sg_neg = (np.sign(np.sin(p)) - 1)/2
     
-    r_ss = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
+    r2_term = r2*np.cos(p)**2
+    r3_term = r3*sg_pos*np.sin(p)**2
+    r4_term = r4*sg_neg*np.sin(p)**2
+    r_ss = (r0 + (np.sin(t/2)**2)*(r2_term + r3_term + r4_term)) * ((p_dyn)**r1)
     
     a_f =  (a0 + a1 * p_dyn)
     
@@ -621,13 +714,17 @@ def Shuelike_rasymmetric_r1fixed(parameters=[], coordinates=[], variables=False,
         return ('t', 'p', 'p_dyn'), 'r'
     
     t, p, p_dyn = coordinates
-    r0, r2, r3, r4, a0, a1 = parameters
+    r0, r2, r2_scale, r3, r4, a0, a1 = parameters
     r1 = -0.25
     
     sg_pos = (np.sign(np.sin(p)) + 1)/2
     sg_neg = (np.sign(np.sin(p)) - 1)/2
     
-    r_ss = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*sg_pos*np.sin(p) + r4*sg_neg*np.sin(p))) * ((p_dyn)**r1)
+    r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r3_term = r3*sg_pos*np.sin(p)
+    r4_term = r4*sg_neg*np.sin(p)
+    r_ss = r0 * ((p_dyn)**r1) 
+    r_perturb = (np.sin(t/2)) * (r2_term + r3_term + r4_term) * ((p_dyn)**r1) 
     
     a_f =  (a0 + a1 * p_dyn)
     
@@ -637,14 +734,14 @@ def Shuelike_rasymmetric_r1fixed(parameters=[], coordinates=[], variables=False,
         return a_f
     
     # Calculate r
-    r = r_ss * (2/(1 + np.cos(t)))**a_f
+    r = r_ss * (2/(1 + np.cos(t)))**a_f + r_perturb
 
     return r
 
-
-def Shuelike_AsymmetryCase1(parameters=[], coordinates=[], variables=False):
+def Shuelike_rasymmetric_simple(parameters=[], coordinates=[], variables=False,
+                                return_r_ss:bool=False, return_a_f:bool=False):
     """
-    Shuelike, w/ Polar Flattening + dawn/dusk symmetry
+    
 
     Parameters
     ----------
@@ -663,50 +760,32 @@ def Shuelike_AsymmetryCase1(parameters=[], coordinates=[], variables=False):
         return ('t', 'p', 'p_dyn'), 'r'
     
     t, p, p_dyn = coordinates
-    r0, r1, r2, a0, a1 = parameters
+    r0, r3, r4, a0, a1 = parameters
+    r1 = -0.25
     
-
-   
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
     
-    a_f = (a0 + a1 * p_dyn)# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
+    # r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r3_term = r3*sg_pos*np.sin(p)
+    r4_term = r4*sg_neg*np.sin(p)
+    r_ss = r0 * ((p_dyn)**r1) 
+    r_perturb = (np.sin(t/2)**2) * (r3_term + r4_term) * ((p_dyn)**r1) 
     
-    r = r_n * (2/(1 + np.cos(t)))**a_f
+    a_f =  (a0 + a1 * p_dyn)
+    
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f + r_perturb
 
     return r
 
-def Shuelike_AsymmetryCase1p5(parameters=[], coordinates=[], variables=False):
-    """
-    Shuelike, w/ different formulation of polar flattening + dawn/dusk symmetry
-
-    Parameters
-    ----------
-    parameters : TYPE
-        DESCRIPTION.
-    coordinates : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    r : TYPE
-        DESCRIPTION.
-
-    """
-    if variables:
-        return ('t', 'p', 'p_dyn'), 'r'
-    
-    t, p, p_dyn = coordinates
-    r0, r1, r2, a0, a1 = parameters
-    
-
-    r_n = (r0 * (p_dyn)**r1) * (r2*np.sin(t/2)*np.cos(p)**2)
-    
-    a_f = (a0 + a1 * p_dyn)# * (1 + a3*np.sin(p) + a4*np.sin(-p) + a5*np.cos(p)**2)
-    
-    r = r_n * (2/(1 + np.cos(t)))**a_f
-
-    return r
-
-def Shuelike_AsymmeryCase2v1(parameters=[], coordinates=[], variables=False):
+def ShuelikeAsymmetric(parameters=[], coordinates=[], variables=False,
+                       return_r_ss:bool=False, return_a_f:bool=False):
     """
     
 
@@ -729,16 +808,28 @@ def Shuelike_AsymmeryCase2v1(parameters=[], coordinates=[], variables=False):
     t, p, p_dyn = coordinates
     r0, r1, r2, r3, a0, a1 = parameters
     
-    # r_n = (r0 * p_dyn**r1) * (r2*np.cos(p)**2 + r3*sg_pos*np.sin(p)*np.cos(t) + r4*sg_neg*np.sin(p)*np.cos(t))
-    r_n = (r0 + np.sin(t/2)*(r2*np.cos(p)**2 + r3*np.sin(p))) * ((p_dyn)**r1)
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
+    
+    # r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r2_term = r2*sg_pos*np.sin(p)
+    r3_term = r3*sg_neg*np.sin(p)
+    r_ss = r0 * ((p_dyn)**r1) + (np.sin(t/2)**2) * (r2_term + r3_term) * ((p_dyn)**r1) 
     
     a_f =  (a0 + a1 * p_dyn)
     
-    r = r_n * (2/(1 + np.cos(t)))**a_f
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f
 
     return r
 
-def Shuelike_AsymmeryCase3v1(parameters=[], coordinates=[], variables=False):
+def ShuelikeAsymmetric_r1fixed(parameters=[], coordinates=[], variables=False,
+                       return_r_ss:bool=False, return_a_f:bool=False):
     """
     
 
@@ -759,16 +850,255 @@ def Shuelike_AsymmeryCase3v1(parameters=[], coordinates=[], variables=False):
         return ('t', 'p', 'p_dyn'), 'r'
     
     t, p, p_dyn = coordinates
-    r0, r1, a0, a1, a2, a3 = parameters
+    r0, r2, r3, a0, a1 = parameters
+    r1 = -0.25
     
-    # sg_pos = (np.sign(np.sin(p)) + 1)/2
-    # sg_neg = (np.sign(np.sin(p)) - 1)/2
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
     
-    r_n = r0 * (p_dyn)**r1
+    # r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r2_term = r2*sg_pos*np.sin(p)
+    r3_term = r3*sg_neg*np.sin(p)
+    r_ss = r0 * ((p_dyn)**r1) + (np.sin(t/2)**2) * (r2_term + r3_term) * ((p_dyn)**r1) 
     
-    a_f = (a0 + a2 * np.cos(p) + a3 * np.cos(p)**2) +  a1 * p_dyn
+    a_f =  (a0 + a1 * p_dyn)
     
-    r = r_n * (2/(1 + np.cos(t)))**a_f
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f
+
+    return r
+
+def ShuelikeAsymmetric_AsPerturbation(parameters=[], coordinates=[], variables=False,
+                                      return_r_ss:bool=False, return_a_f:bool=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    r0, r1, r2, r3, a0, a1 = parameters
+    
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
+    
+    # r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r2_term = r2*sg_pos*np.sin(p)
+    r3_term = r3*sg_neg*np.sin(p)
+    r_ss = r0 * ((p_dyn)**r1) 
+    r_perturb = (np.sin(t/2)**2) * (r2_term + r3_term) * ((p_dyn)**r1) 
+    
+    a_f =  (a0 + a1 * p_dyn)
+    
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f + r_perturb
+
+    return r
+
+def ShuelikeAsymmetric_AsPerturbation_r1fixed(parameters=[], coordinates=[], variables=False,
+                                      return_r_ss:bool=False, return_a_f:bool=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    r0, r2, r3, a0, a1 = parameters
+    r1 = -0.25
+    
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
+    
+    # r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r2_term = r2*sg_pos*np.sin(p)
+    r3_term = r3*sg_neg*np.sin(p)
+    r_ss = r0 * ((p_dyn)**r1) 
+    r_perturb = (np.sin(t/2)**2) * (r2_term + r3_term) * ((p_dyn)**r1) 
+    
+    a_f =  (a0 + a1 * p_dyn)
+    
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f + r_perturb
+
+    return r
+
+def ShuelikeAsymmetric_AsPerturbation_2(parameters=[], coordinates=[], variables=False,
+                                        return_r_ss:bool=False, return_a_f:bool=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    r0, r1, r2, r3, a0, a1 = parameters
+    
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = -(np.sign(np.sin(p)) - 1)/2
+    
+    # r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r2_term = r2*sg_pos * np.sin(p)**2
+    r3_term = r3*sg_neg * np.sin(p)**2
+    r_ss = r0 * ((p_dyn)**r1) 
+    r_perturb = (np.sin(t/2)**2) * (r2_term + r3_term) * ((p_dyn)**r1) 
+    
+    a_f =  (a0 + a1 * p_dyn)
+    
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f + r_perturb
+
+    return r
+
+
+def ShuelikeAsymmetric_AsPerturbation_r1fixed_2(parameters=[], coordinates=[], variables=False,
+                                      return_r_ss:bool=False, return_a_f:bool=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    r0, r2, r3, a0, a1 = parameters
+    r1 = -0.25
+    
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = -(np.sign(np.sin(p)) - 1)/2
+    
+    # r2_term = r2*np.cos(p)**2 * (r2_scale) + (1 - r2_scale)
+    r2_term = r2*sg_pos * np.sin(p)**2
+    r3_term = r3*sg_neg * np.sin(p)**2
+    r_ss = r0 * ((p_dyn)**r1) 
+    r_perturb = (np.sin(t/2)**2) * (r2_term + r3_term) * ((p_dyn)**r1) 
+    
+    a_f =  (a0 + a1 * p_dyn)
+    
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f + r_perturb
+
+    return r
+
+
+def Shuelike_aasymmetric_r1fixed(parameters=[], coordinates=[], variables=False,
+                                 return_r_ss:bool=False, return_a_f:bool=False):
+    """
+    
+
+    Parameters
+    ----------
+    parameters : TYPE
+        DESCRIPTION.
+    coordinates : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    r : TYPE
+        DESCRIPTION.
+
+    """
+    if variables:
+        return ('t', 'p', 'p_dyn'), 'r'
+    
+    t, p, p_dyn = coordinates
+    r0, a0, a1, a2, a3, a4 = parameters
+    r1 = -0.25
+    
+    sg_pos = (np.sign(np.sin(p)) + 1)/2
+    sg_neg = (np.sign(np.sin(p)) - 1)/2
+    
+    r_ss = r0 * ((p_dyn)**r1) 
+    
+    a2_term = 1 - (a2 * np.cos(p)**2)
+    a3_term = 1 - (sg_pos * a3 * np.sin(p)**2)
+    a4_term = 1 - (sg_neg * a4 * np.sin(p)**2)
+    a_f =  (a0 + a1 * p_dyn) * a2_term * a3_term * a4_term
+    
+    if return_r_ss:
+        return r_ss
+    if return_a_f:
+        return a_f
+    
+    # Calculate r
+    r = r_ss * (2/(1 + np.cos(t)))**a_f
 
     return r
 
