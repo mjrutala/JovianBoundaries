@@ -78,9 +78,11 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+<!-- [![Product Name Screen Shot][product-screenshot]](https://example.com) -->
 
-Here's a blank template to get started. To avoid retyping too much info, do a search and replace with your text editor for the following: `mjrutala`, `JovianBoundaries`, `twitter_handle`, `linkedin_username`, `email_client`, `email`, `project_title`, `project_description`, `project_license`
+This repo contains the Bayesian model used to estimate Jupiter's magnetospheric boundaries from scarce, in-situ spacecraft data with imperfect coverage over the planet.
+
+The repo is currently available as-is; future releases will include convenience functions for locating and plotting Jupiter's magneotpause and bow shock boundary surfaces.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -96,8 +98,7 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 <!-- GETTING STARTED -->
 ## Getting Started
 
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
+The boundary model definitions are availabel in `code/BoundaryModels.py`; at present, the coefficients for these models need to be obtained from Rutala et al. (2025, submitted).
 
 <!-- ### Prerequisites
 
