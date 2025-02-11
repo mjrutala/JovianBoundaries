@@ -23,8 +23,8 @@
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
 [![project_license][license-shield]][license-url]
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14851327.svg)](https://doi.org/10.5281/zenodo.14851327)
 <!--[![LinkedIn][linkedin-shield]][linkedin-url]-->
-
 
 
 <!-- PROJECT LOGO -->
