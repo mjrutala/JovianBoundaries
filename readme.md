@@ -98,7 +98,11 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 <!-- GETTING STARTED -->
 ## Getting Started
 
-The boundary model definitions are availabel in `code/BoundaryModels.py`; at present, the coefficients for these models need to be obtained from Rutala et al. (2025, submitted).
+The function contained in `code/find_Boundary.py` can be used to estimate the locations of Jupiter's magnetospheric boundaries: the spatial coordinates or solar wind dynamic pressure may be estimated, with uncertainties, by providing enough information.
+
+Some examples of how to use this function are available in this [this Jupyter Notebook](https://github.com/mjrutala/JovianBoundaries/blob/main/code/JovianBoundariesExamples.ipynb).
+
+<!-- The boundary model definitions are available in `code/BoundaryModels.py`; at present, the coefficients for these models need to be obtained from Rutala et al. (2025, submitted). -->
 
 <!-- ### Prerequisites
 
