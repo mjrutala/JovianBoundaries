@@ -120,7 +120,7 @@ The `find_Boundary` function is dependent only on basic python packages (e.g. `n
 The code required to MCMC sample the posterior of the Bayesian boundary model has additional dependencies. The easiest way to get started with this code is create a new conda environment with all the dependencies. To do this, navigate to the directory containing this package and run:
 ```
 >>conda env create -f environment.yml
->>conda activate huxt
+>>conda activate JovianBoundaries
 ```
 
 <!-- ### Installation
