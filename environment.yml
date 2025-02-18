@@ -1,0 +1,19 @@
+name: JupiterBoundaries
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - pymc
+  - spyder-kernels=2.5
+  - spiceypy
+  - scikit-learn
+  - astropy
+  - python==3.10.14
+  - aesara
+  - corner
+  - statsmodels
+  - numpyro
+  - blackjax
+  - nutpie
+  - numba
+  - sunpy
