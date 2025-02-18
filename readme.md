@@ -18,11 +18,10 @@
 *** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
 *** https://www.markdownguide.org/basic-syntax/#reference-style-links
 -->
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![project_license][license-shield]][license-url]
+![GitHub contributors](https://img.shields.io/github/contributors/mjrutala/JovianBoundaries)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/mjrutala/JovianBoundaries)
+![GitHub License](https://img.shields.io/github/license/mjrutala/JovianBoundaries)
+[![Static Badge](https://img.shields.io/badge/arXiv-2502.09186-A42C25)](https://arxiv.org/abs/2502.09186)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14851327.svg)](https://doi.org/10.5281/zenodo.14851327)
 <!--[![LinkedIn][linkedin-shield]][linkedin-url]-->
 
@@ -59,7 +58,8 @@
     <li><a href="#about-the-project">About The Project</a>
     <li><a href="#usage">Usage</a></li>
     <li>
-      <a href="#getting-started">Getting Started</a>
+      <a href="#quick-start">Quick Start</a>
+      <a href="#documentation">Documentation</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
@@ -95,22 +95,33 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p> -->
 
-<!-- GETTING STARTED -->
-## Getting Started
+<!-- QUICK START -->
+## Quick Start
 
 The function contained in `code/find_Boundary.py` can be used to estimate the locations of Jupiter's magnetospheric boundaries: the spatial coordinates or solar wind dynamic pressure may be estimated, with uncertainties, by providing enough information.
 
-Some examples of how to use this function are available in this [this Jupyter Notebook](https://github.com/mjrutala/JovianBoundaries/blob/main/code/JovianBoundariesExamples.ipynb).
+This repo is note packaged: it cannot be installed using `pip install ...` or `conda install...`, nor can it be imported using `import ...`. Instead, after downloading the repo, add the lines:
+```python
+import sys
+sys.path.append("/full/path/to/JovianBoundaries/code/")
+from find_Boundary import find_Boundary
+```
+in the import section of your code to use the `find_Boundary` function.
+
+Some examples of `find_Boundary` are available in [this Jupyter Notebook](https://github.com/mjrutala/JovianBoundaries/blob/main/code/JovianBoundariesExamples.ipynb).
 
 <!-- The boundary model definitions are available in `code/BoundaryModels.py`; at present, the coefficients for these models need to be obtained from Rutala et al. (2025, submitted). -->
 
-<!-- ### Prerequisites
+## Documentation
 
-This is an example of how to list things you need to use the software and how to install them.
-* npm
-  ```sh
-  npm install npm@latest -g
-  ``` -->
+### Prerequisites
+
+The `find_Boundary` function is dependent only on basic python packages (e.g. `numpy`), which are easily obtainable. 
+The code required to MCMC sample the posterior of the Bayesian boundary model has additional dependencies. The easiest way to get started with this code is create a new conda environment with all the dependencies. To do this, navigate to the directory containing this package and run:
+```
+>>conda env create -f environment.yml
+>>conda activate huxt
+```
 
 <!-- ### Installation
 
