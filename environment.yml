@@ -1,4 +1,4 @@
-name: JupiterBoundaries
+name: JovianBoundaries
 channels:
   - conda-forge
   - defaults
