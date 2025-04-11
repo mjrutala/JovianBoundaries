@@ -1,5 +1,5 @@
 def find_Boundary(boundary='MP', x=False, y=False, z=False, p_sw=False, 
-                  guess=1):
+                  guess=None, n_draws=1000):
     """
     This function takes 3 of (x, y, z, p_sw) and estimates the 4th,
     beginning the search at 'guess'
@@ -49,36 +49,41 @@ def find_Boundary(boundary='MP', x=False, y=False, z=False, p_sw=False,
         print(find_Boundary.__doc__)
         return
     
+    # # If guess is left blank, default to all 1
+    # if guess is None:
+    #     guess = np.full(n_input, 1)
+    # # elif len(guess) > 1: # if a single guess was input, extend it to n_input?
+    
     # The uncertainties are found by Monte Carlo, 
     # with random seed (rng), size (n), and samples (gauss_factor)
     rng = np.random.default_rng()
-    n = 500 
-    gauss_factor = rng.normal(0, 1, n)
+    # n = n_draws
+    gauss_factor = rng.normal(0, 1, n_draws)
     
     # Choose the appropriate model parameter vector (MP or BS)
     if boundary.lower() in ['mp', 'magnetopause']:
-        r0 = rng.normal(33.5, 0.0, n)
-        r1 = np.full(n, -0.25)
-        r2 = rng.normal(12.9, 0.0, n)
-        r3 = rng.normal(25.8, 0.0, n)
-        a0 = rng.normal(0.19, 0.00, n)
-        a1 = rng.normal(1.27, 0.00, n)
+        r0 = rng.normal(33.5, 0.0, n_draws)
+        r1 = np.full(n_draws, -0.25)
+        r2 = rng.normal(12.9, 0.0, n_draws)
+        r3 = rng.normal(25.8, 0.0, n_draws)
+        a0 = rng.normal(0.19, 0.00, n_draws)
+        a1 = rng.normal(1.27, 0.00, n_draws)
         
-        sigma_b = rng.normal(16.8, 0.8, n)
-        sigma_m = rng.normal(0.15, 0.01, n)
+        sigma_b = rng.normal(16.8, 0.8, n_draws)
+        sigma_m = rng.normal(0.15, 0.01, n_draws)
         
         C = [r0, r1, r2, r3, a0, a1]
         sigma = [sigma_b, sigma_m]
     elif boundary.lower() in ['bs', 'bow shock', 'bow_shock', 'bowshock']:
-        r0 = rng.normal(36.4, 0.0, n)
-        r1 = np.full(n, -0.25)
-        r2 = rng.normal(0.0, 0.0, n)
-        r3 = rng.normal(9.9, 0.0, n)
-        a0 = rng.normal(0.89, 0.00, n)
-        a1 = rng.normal(0.88, 0.00, n)
+        r0 = rng.normal(36.4, 0.0, n_draws)
+        r1 = np.full(n_draws, -0.25)
+        r2 = rng.normal(0.0, 0.0, n_draws)
+        r3 = rng.normal(9.9, 0.0, n_draws)
+        a0 = rng.normal(0.89, 0.00, n_draws)
+        a1 = rng.normal(0.88, 0.00, n_draws)
         
-        sigma_b = rng.normal(13.3, 0.8, n)
-        sigma_m = rng.normal(0.20, 0.01, n)
+        sigma_b = rng.normal(13.3, 0.8, n_draws)
+        sigma_m = rng.normal(0.20, 0.01, n_draws)
         
         C = [r0, r1, r2, r3, a0, a1]
         sigma = [sigma_b, sigma_m]
@@ -137,18 +142,18 @@ def find_Boundary(boundary='MP', x=False, y=False, z=False, p_sw=False,
     
     # This inner function returns the difference between r_b and the point
     def minimization(dependent):
-        return r_b(dependent) - np.full(n, fn_r(dependent))
+        return r_b(dependent) - np.full(n_draws, fn_r(dependent))
     
     # The best solution should minimize 'minimization' (i.e., ~0)
-    solutions = fsolve(minimization, np.full(n, guess))
+    solutions = fsolve(minimization, np.full(n_draws, guess))
     # Check that solutions yield near-zero residuals
     check = np.isclose(minimization(solutions), 0, atol=1e-1, rtol=0)
     
     # Unless y == z == 0, in which case r_b is independent of x
     # then fsolve is unable to solve, and the trivial solution is
-    if y == z == 0.0:
+    if (type(y) != bool) & (type(z) != bool) & (y == z == 0.0):
         solutions = r_b(0)
-        check = np.full(n, True)
+        check = np.full(n_draws, True)
     
     # For pressure, return lognormal uncertainties in linear space;
     # otherwise, return normal uncertainties
